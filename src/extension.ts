@@ -88,7 +88,6 @@ export function activate(context: vscode.ExtensionContext) {
 		configDisposable,
 		onOpenDisposable,
 		onChangeDisposable,
-		{ dispose: () => hoverProvider.dispose() },
 		{ dispose: () => preTranslationService.dispose() }
 	);
 
