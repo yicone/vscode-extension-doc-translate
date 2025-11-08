@@ -74,6 +74,7 @@ export class PreTranslationService {
 
                 try {
                     logger.info(`Translating block ${translated + 1}/${blocks.length}`);
+                    logger.debug(`Pre-translation block text (${block.text.length} chars): "${block.text.substring(0, 100)}..."`);
                     const translation = await this.claudeClient.translate(block.text);
                     this.cache.set(block.text, translation);
                     translated++;

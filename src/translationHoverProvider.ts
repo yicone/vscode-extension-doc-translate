@@ -30,6 +30,8 @@ export class TranslationHoverProvider implements vscode.HoverProvider {
             return null;
         }
 
+        logger.debug(`Hover block text (${block.text.length} chars): "${block.text.substring(0, 100)}..."`);
+
         // Get translation from cache only (no on-demand translation)
         const translation = this.cache.get(block.text);
 
