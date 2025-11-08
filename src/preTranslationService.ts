@@ -5,6 +5,9 @@ import { PythonBlockDetector } from './pythonBlockDetector';
 import { InlineTranslationProvider } from './inlineTranslationProvider';
 import { logger } from './logger';
 
+// Maximum number of concurrent translation requests
+const MAX_CONCURRENT_REQUESTS = 5;
+
 export class PreTranslationService {
     private claudeClient: ClaudeClient;
     private cache: TranslationCache;
@@ -66,28 +69,27 @@ export class PreTranslationService {
             let translated = 0;
             const startTime = Date.now();
 
-            // Translate each block
-            for (const block of blocks) {
-                // Check if already in cache
-                if (this.cache.get(block.text)) {
-                    logger.debug(`Block already cached, skipping: ${block.text.substring(0, 30)}...`);
-                    translated++;
-                    continue;
-                }
+            // Filter out already cached blocks
+            const blocksToTranslate = blocks.filter(block => !this.cache.get(block.text));
+            const cachedCount = blocks.length - blocksToTranslate.length;
 
-                try {
-                    logger.info(`Translating block ${translated + 1}/${blocks.length}`);
-                    logger.debug(`Pre-translation block text (${block.text.length} chars): "${block.text.substring(0, 100)}..."`);
-                    const translation = await this.claudeClient.translate(block.text);
-                    this.cache.set(block.text, translation);
-                    translated++;
+            if (cachedCount > 0) {
+                logger.info(`${cachedCount} blocks already cached, skipping`);
+                translated = cachedCount;
+            }
 
-                    // Update progress
-                    this.statusBarItem.text = `$(sync~spin) Translating ${translated}/${blocks.length}...`;
-                } catch (error) {
-                    logger.error(`Failed to translate block: ${block.text.substring(0, 30)}...`, error);
-                    // Continue with next block even if one fails
-                }
+            if (blocksToTranslate.length === 0) {
+                logger.info('All blocks already cached, no translation needed');
+            } else {
+                logger.info(`Translating ${blocksToTranslate.length} blocks with max ${MAX_CONCURRENT_REQUESTS} concurrent requests`);
+
+                // Translate blocks in parallel with concurrency limit
+                await this.translateBlocksConcurrently(blocksToTranslate, blocks.length, (current, total) => {
+                    translated = cachedCount + current;
+                    this.statusBarItem.text = `$(sync~spin) Translating ${translated}/${total}...`;
+                });
+
+                translated = blocks.length;
             }
 
             const duration = Date.now() - startTime;
@@ -111,6 +113,45 @@ export class PreTranslationService {
         } finally {
             this.isTranslating = false;
         }
+    }
+
+    /**
+     * Translate blocks concurrently with a limit on concurrent requests
+     */
+    private async translateBlocksConcurrently(
+        blocks: Array<{ text: string; range: vscode.Range; type: 'docstring' | 'comment' }>,
+        totalBlocks: number,
+        onProgress: (current: number, total: number) => void
+    ): Promise<void> {
+        let completed = 0;
+        let index = 0;
+
+        // Process blocks in batches
+        while (index < blocks.length) {
+            // Get next batch (up to MAX_CONCURRENT_REQUESTS)
+            const batch = blocks.slice(index, index + MAX_CONCURRENT_REQUESTS);
+            index += batch.length;
+
+            // Translate all blocks in this batch concurrently
+            const promises = batch.map(async (block) => {
+                try {
+                    logger.debug(`Translating block text (${block.text.length} chars): "${block.text.substring(0, 100)}..."`);
+                    const translation = await this.claudeClient.translate(block.text);
+                    this.cache.set(block.text, translation);
+                    completed++;
+                    onProgress(completed, totalBlocks);
+                    logger.debug(`Completed ${completed}/${blocks.length}`);
+                } catch (error) {
+                    logger.error(`Failed to translate block: ${block.text.substring(0, 30)}...`, error);
+                    // Continue with next block even if one fails
+                }
+            });
+
+            // Wait for all translations in this batch to complete
+            await Promise.all(promises);
+        }
+
+        logger.info(`Concurrent translation completed: ${completed}/${blocks.length} blocks translated`);
     }
 
     /**
