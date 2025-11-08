@@ -14,20 +14,12 @@ export class PythonBlockDetector {
     async extractBlock(document: vscode.TextDocument, position: vscode.Position): Promise<TextBlock | null> {
         logger.debug(`Extracting block at position: line ${position.line}, char ${position.character}`);
 
-        // First, try to detect docstring using LSP
+        // Try to detect docstring using LSP
         const docstring = await this.extractDocstringLSP(document, position);
         if (docstring) {
             logger.info(`Detected docstring via LSP (${docstring.range.start.line}-${docstring.range.end.line})`);
             logger.debug('Docstring content:', { text: docstring.text.substring(0, 50) + '...' });
             return docstring;
-        }
-
-        // Fallback to regex-based docstring detection
-        const docstringFallback = this.extractDocstring(document, position);
-        if (docstringFallback) {
-            logger.info(`Detected docstring via regex (${docstringFallback.range.start.line}-${docstringFallback.range.end.line})`);
-            logger.debug('Docstring content:', { text: docstringFallback.text.substring(0, 50) + '...' });
-            return docstringFallback;
         }
 
         // Second, try to detect comment block
@@ -189,99 +181,6 @@ export class PythonBlockDetector {
         }
 
         const range = new vscode.Range(startLine, startCol, endLine, endCol);
-        const fullText = document.getText(range);
-        const content = fullText.substring(quote.length, fullText.length - quote.length).trim();
-
-        return { text: content, range };
-    }
-
-    /**
-     * Extract docstring (""" ... """ or ''' ... ''')
-     */
-    private extractDocstring(document: vscode.TextDocument, position: vscode.Position): TextBlock | null {
-        const line = document.lineAt(position.line);
-        const text = line.text;
-
-        // Check if cursor is on a line containing """ or '''
-        const tripleDoubleQuote = '"""';
-        const tripleSingleQuote = "'''";
-
-        // Try both quote types
-        for (const quote of [tripleDoubleQuote, tripleSingleQuote]) {
-            const block = this.extractDocstringWithQuote(document, position, quote);
-            if (block) {
-                return block;
-            }
-        }
-
-        return null;
-    }
-
-    private extractDocstringWithQuote(
-        document: vscode.TextDocument,
-        position: vscode.Position,
-        quote: string
-    ): TextBlock | null {
-        // Search for opening quote
-        let startLine = position.line;
-        let startCol = 0;
-        let foundStart = false;
-
-        // Search upward for opening quote
-        for (let line = position.line; line >= 0; line--) {
-            const lineText = document.lineAt(line).text;
-            const quoteIndex = lineText.indexOf(quote);
-            if (quoteIndex !== -1) {
-                startLine = line;
-                startCol = quoteIndex;
-                foundStart = true;
-                break;
-            }
-        }
-
-        if (!foundStart) {
-            return null;
-        }
-
-        // Search for closing quote (must be different from opening)
-        let endLine = startLine;
-        let endCol = startCol + quote.length;
-        let foundEnd = false;
-
-        // Start searching from after the opening quote
-        const startLineText = document.lineAt(startLine).text;
-        const nextQuoteIndex = startLineText.indexOf(quote, startCol + quote.length);
-
-        if (nextQuoteIndex !== -1) {
-            // Closing quote on the same line
-            endLine = startLine;
-            endCol = nextQuoteIndex + quote.length;
-            foundEnd = true;
-        } else {
-            // Search downward for closing quote
-            for (let line = startLine + 1; line < document.lineCount; line++) {
-                const lineText = document.lineAt(line).text;
-                const quoteIndex = lineText.indexOf(quote);
-                if (quoteIndex !== -1) {
-                    endLine = line;
-                    endCol = quoteIndex + quote.length;
-                    foundEnd = true;
-                    break;
-                }
-            }
-        }
-
-        if (!foundEnd) {
-            return null;
-        }
-
-        // Check if position is within the docstring range
-        const range = new vscode.Range(startLine, startCol, endLine, endCol);
-        if (!range.contains(position)) {
-            return null;
-        }
-
-        // Extract text between quotes
         const fullText = document.getText(range);
         const content = fullText.substring(quote.length, fullText.length - quote.length).trim();
 
