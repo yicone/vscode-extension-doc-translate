@@ -1,114 +1,91 @@
 # Doc Translate
 
-VSCode extension that translates English docstrings and comments in Python code to Japanese using Claude API.
+PythonコードのdocstringやコメントをClaude APIで日本語に翻訳するVSCode拡張機能です。
 
-## Features
+## 機能
 
-- **Instant Hover Translation**: Hover over Python docstrings or comments to see Japanese translations instantly
-- **Background Pre-Translation**: Automatically translates all docstrings and comments when you open a Python file
-  - No waiting time when hovering (translations are already cached)
-  - Progress indicator in status bar
-  - Smart caching: only translates once per file
-- **LSP-Powered Detection**: Uses VSCode's Language Server Protocol (Pylance) exclusively for accurate Python syntax analysis
-- **Smart Block Detection**: Automatically detects and translates:
-  - Docstrings (both `"""` and `'''` styles) - detected via LSP symbol analysis
-  - Comment blocks (consecutive lines starting with `#`)
-  - Inline comments (end-of-line comments)
-- **Translation Cache**: Caches translations in memory to avoid redundant API calls
-- **Loading Indicator**: Shows a spinning icon in the status bar while translating
-- **Comprehensive Logging**: Detailed logs showing LSP queries, API requests, responses, and debugging info
-- **Configurable**: Supports both environment variable and VSCode settings for API key configuration
+- **即座にホバー翻訳**: Pythonのdocstringやコメントにカーソルを合わせると、即座に日本語訳が表示されます
+- **バックグラウンド事前翻訳**: Pythonファイルを開くと、すべてのdocstringとコメントを自動的に翻訳
+  - ホバー時の待ち時間なし（事前にキャッシュ済み）
+  - ステータスバーに進捗表示
+  - スマートキャッシング: ファイルごとに1回のみ翻訳
+- **LSP駆動の検出**: VSCodeのLanguage Server Protocol (Pylance)を使用した正確なPython構文解析
+- **スマートなブロック検出**: 以下を自動検出・翻訳:
+  - Docstring（`"""`と`'''`の両方）- LSPシンボル解析による検出
+  - コメントブロック（連続する`#`行）
+  - インラインコメント（行末コメント）
+- **翻訳キャッシュ**: メモリ内キャッシュでAPI呼び出しを最小化
+- **読み込みインジケーター**: 翻訳中はステータスバーに回転アイコンを表示
+- **詳細なログ**: LSPクエリ、APIリクエスト/レスポンス、デバッグ情報を記録
+- **設定可能**: 環境変数とVSCode設定の両方に対応
 
-## Requirements
+## 必要要件
 
-- **Anthropic API Key**: You need a valid Anthropic API key to use this extension
-  - Set `ANTHROPIC_API_KEY` environment variable (recommended), or
-  - Configure `docTranslate.anthropicApiKey` in VSCode settings
-- **Python Extension**: Requires VSCode's Python extension (with Pylance) for LSP-based docstring detection
+- **Anthropic APIキー**: この拡張機能を使用するにはAnthropicのAPIキーが必要です
+  - `ANTHROPIC_API_KEY` 環境変数を設定（推奨）、または
+  - VSCode設定で `docTranslate.anthropicApiKey` を設定
+- **Python拡張機能**: LSPベースのdocstring検出にはVSCodeのPython拡張機能（Pylance付き）が必要
 
-## Extension Settings
+## 拡張機能の設定
 
-This extension contributes the following settings:
+この拡張機能は以下の設定項目を提供します：
 
-* `docTranslate.anthropicApiKey`: Anthropic API Key for Claude translation (environment variable `ANTHROPIC_API_KEY` takes precedence)
-* `docTranslate.model`: Claude model to use for translation (default: `claude-sonnet-4-5-20250929`)
-* `docTranslate.timeout`: API request timeout in milliseconds (default: `30000`)
+* `docTranslate.anthropicApiKey`: Claude翻訳用のAnthropic APIキー（環境変数 `ANTHROPIC_API_KEY` が優先されます）
+* `docTranslate.model`: 翻訳に使用するClaudeモデル（デフォルト: `claude-sonnet-4-5-20250929`）
+* `docTranslate.timeout`: APIリクエストのタイムアウト（ミリ秒、デフォルト: `30000`）
 
-## Usage
+## 使い方
 
-1. Set your Anthropic API key:
-   - **Option 1 (Recommended)**: Set environment variable `ANTHROPIC_API_KEY`
-   - **Option 2**: Set `docTranslate.anthropicApiKey` in VSCode settings
+1. Anthropic APIキーを設定:
+   - **方法1（推奨）**: 環境変数 `ANTHROPIC_API_KEY` を設定
+   - **方法2**: VSCode設定で `docTranslate.anthropicApiKey` を設定
 
-2. Open a Python file
-   - The extension automatically starts translating all docstrings and comments in the background
-   - Watch the status bar for progress: `$(sync~spin) Translating X/Y blocks...`
-   - When complete: `$(check) Translated X blocks`
+2. Pythonファイルを開く
+   - 拡張機能が自動的にバックグラウンドですべてのdocstringとコメントを翻訳開始
+   - ステータスバーで進捗を確認: `$(sync~spin) Translating X/Y blocks...`
+   - 完了時: `$(check) Translated X blocks`
 
-3. Hover your cursor over any docstring or comment
-   - The Japanese translation will appear **instantly** (already cached from step 2)
+3. docstringやコメントにカーソルをホバー
+   - 日本語訳が**即座に**表示されます（手順2で既にキャッシュ済み）
 
-4. Edit the file
-   - Changes invalidate the cache for that file
-   - The file will be re-translated automatically
+4. ファイルを編集
+   - 変更するとそのファイルのキャッシュが無効化されます
+   - ファイルは自動的に再翻訳されます
 
-## Commands
+## コマンド
 
-* `Doc Translate: Clear Translation Cache`: Clear both translation cache and pre-translation cache (forces re-translation on next file open)
-* `Doc Translate: Show Logs`: Open the output channel to view detailed logs
+* `Doc Translate: Clear Translation Cache`: 翻訳キャッシュと事前翻訳キャッシュをクリア（次回ファイルを開いたときに再翻訳）
+* `Doc Translate: Show Logs`: 詳細ログを表示する出力チャンネルを開く
 
-## Debugging
+## デバッグ
 
-To view detailed logs:
+詳細ログを表示するには：
 
-1. Open Command Palette (`Cmd+Shift+P` or `Ctrl+Shift+P`)
-2. Run `Doc Translate: Show Logs`
-3. The "Doc Translate" output channel will show detailed logs including:
-   - Extension activation status
-   - API key detection
-   - Pre-translation progress (when files are opened)
-   - LSP symbol queries and results
-   - Docstring detection via LSP
-   - Translation requests and responses
-   - Cache hits/misses
-   - Error details
+1. コマンドパレットを開く（`Cmd+Shift+P` または `Ctrl+Shift+P`）
+2. `Doc Translate: Show Logs` を実行
+3. "Doc Translate" 出力チャンネルに以下の詳細ログが表示されます：
+   - 拡張機能の起動状態
+   - APIキーの検出
+   - 事前翻訳の進捗（ファイルを開いたとき）
+   - LSPシンボルのクエリと結果
+   - LSPによるdocstring検出
+   - 翻訳リクエストとレスポンス
+   - キャッシュヒット/ミス
+   - エラー詳細
 
-Alternatively, you can open the output panel manually:
-- View → Output → Select "Doc Translate" from the dropdown
+または、出力パネルを手動で開くこともできます：
+- 表示 → 出力 → ドロップダウンから "Doc Translate" を選択
 
-## Known Issues
+## 既知の問題
 
-None at this time.
+現時点ではありません。
 
-## Release Notes
+## リリースノート
 
-### 0.0.1
+### 0.1.0
 
-Initial MVP release:
-- Hover provider for Python docstrings and comments
-- Claude API integration
-- Translation caching
-- Configurable API key and model settings
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+初回MVPリリース:
+- PythonのdocstringとコメントのホバープロバイダーBE
+- Claude API統合
+- 翻訳キャッシング
+- APIキーとモデル設定の設定機能

@@ -1,7 +1,7 @@
 {
   "name": "doc-translate",
-  "displayName": "vscode-extension-doc-translate",
-  "description": "Translate Python docstrings and comments to Japanese using Claude API",
+  "displayName": "Doc Translate",
+  "description": "Claude APIを使用してPythonのdocstringとコメントを日本語に翻訳",
   "version": "0.1.0",
   "engines": {
     "vscode": "^1.105.0"
@@ -15,11 +15,11 @@
     "commands": [
       {
         "command": "doc-translate.clearCache",
-        "title": "Doc Translate: Clear Translation Cache"
+        "title": "Doc Translate: 翻訳キャッシュをクリア"
       },
       {
         "command": "doc-translate.showLogs",
-        "title": "Doc Translate: Show Logs"
+        "title": "Doc Translate: ログを表示"
       }
     ],
     "configuration": {
@@ -28,17 +28,17 @@
         "docTranslate.anthropicApiKey": {
           "type": "string",
           "default": "",
-          "description": "Anthropic API Key for Claude translation. Environment variable ANTHROPIC_API_KEY takes precedence."
+          "description": "Claude翻訳用のAnthropic APIキー（環境変数 ANTHROPIC_API_KEY が優先されます）"
         },
         "docTranslate.model": {
           "type": "string",
           "default": "claude-sonnet-4-5-20250929",
-          "description": "Claude model to use for translation"
+          "description": "翻訳に使用するClaudeモデル"
         },
         "docTranslate.timeout": {
           "type": "number",
           "default": 30000,
-          "description": "API request timeout in milliseconds"
+          "description": "APIリクエストのタイムアウト（ミリ秒）"
         }
       }
     }

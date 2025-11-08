@@ -1,65 +1,78 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+このファイルは、Claude Code (claude.ai/code) がこのリポジトリのコードを扱う際のガイダンスを提供します。
 
-## Project Overview
+## プロジェクト概要
 
-This is a VSCode extension that translates English docstrings and comments to Japanese using Claude API. The extension targets Python code and provides translations through a hover provider.
+Claude APIを使用して英語のdocstringとコメントを日本語に翻訳するVSCode拡張機能です。Python対象で、ホバープロバイダー経由で翻訳を提供します。
 
-**Target Use Cases:** New developer onboarding, code review, productivity improvement
+**対象ユースケース:** 新人オンボーディング、コードレビュー、生産性向上
 
-## Project Status
+## プロジェクトステータス
 
-Early stage - specification defined in `docs/spec.md`, implementation not yet started.
+v0.1.0リリース済み - バックグラウンド事前翻訳機能を含む完全なMVP実装
 
-## Architecture (from spec.md)
+## アーキテクチャ
 
-### Core Components
+### コアコンポーネント
 
-- **UI**: Hover Provider (shows translation on hover over docstrings/comments)
-- **Target Language**: Python
-- **Translation Direction**: English → Japanese
-- **Translation Target**: Docstrings and comment blocks (not individual lines)
-- **Translation Engine**: Claude API
+- **UI**: ホバープロバイダー（docstring/コメント上でホバーすると翻訳を表示）
+- **対象言語**: Python
+- **翻訳方向**: 英語 → 日本語
+- **翻訳対象**: docstringとコメントブロック（行単位ではなくブロック単位）
+- **翻訳エンジン**: Claude API（Claude 4.5 Sonnet）
+- **検出方法**: LSP（Language Server Protocol / Pylance）でdocstringを検出、正規表現でコメントを検出
+- **事前翻訳**: ファイルを開いた時点で全翻訳をバックグラウンド実行
 
-### Translation Policy
+### 翻訳ポリシー
 
-- Preserve technical terms, function names, class names, library names as-is
-- Natural Japanese translation (not literal)
-- Output only Japanese text (no explanations)
+- 技術用語・関数名・クラス名・ライブラリ名はそのまま保持
+- 直訳ではなく「自然な」日本語に寄せる
+- 日本語のみを出力（説明不要）
 
-### Translation Prompt Template
+### 主要機能
 
+1. **LSPベースのdocstring検出**
+   - `vscode.executeDocumentSymbolProvider` でシンボル情報取得
+   - シンボル定義直後からdocstringを抽出
+
+2. **バックグラウンド事前翻訳**
+   - ファイルオープン時に全docstring/commentを自動翻訳
+   - ステータスバーに進捗表示
+   - キャッシュに保存してhover時は即座に表示
+
+3. **翻訳キャッシュ**
+   - メモリ内ハッシュマップでキャッシュ
+   - ファイル編集時にキャッシュ無効化
+
+## ファイル構成
+
+- `src/extension.ts` - 拡張機能のエントリーポイント、イベントハンドラー登録
+- `src/translationHoverProvider.ts` - ホバープロバイダー実装
+- `src/preTranslationService.ts` - バックグラウンド事前翻訳サービス
+- `src/claudeClient.ts` - Claude API クライアント
+- `src/pythonBlockDetector.ts` - LSPベースのPythonブロック検出
+- `src/translationCache.ts` - 翻訳キャッシュ
+- `src/logger.ts` - ログ出力
+
+## 設定
+
+- `docTranslate.anthropicApiKey` - Anthropic APIキー（環境変数 `ANTHROPIC_API_KEY` が優先）
+- `docTranslate.model` - 使用モデル（デフォルト: `claude-sonnet-4-5-20250929`）
+- `docTranslate.timeout` - タイムアウト（デフォルト: 30000ms）
+
+## 開発
+
+```bash
+# 依存関係インストール
+npm install
+
+# コンパイル
+npm run compile
+
+# 自動コンパイル（開発時）
+npm run watch
+
+# 拡張機能をデバッグ
+F5キーを押す
 ```
-You are a translation assistant specialized in software engineering context.
-Translate the given text from English into natural Japanese.
-
-Rules:
-
-Preserve technical terms (library names, function names, class names, variable names) as they are.
-
-Prefer natural Japanese rather than literal translation.
-
-Output ONLY the translated Japanese text. No explanation, no English.
-
-Translate this text:
-{{COMMENT_TEXT}}
-```
-
-### Block Detection Specification (MVP)
-
-1. Extract docstrings (`""" ～ """`) with highest priority
-2. If not a docstring, extract consecutive comment lines starting with `# `
-3. Determine block range by searching up/down from hover cursor position
-
-## MVP Completion Criteria
-
-- Open Python file in VSCode
-- Hover over docstring or comment
-- Send translation request to Claude
-- Display Japanese translation in hover tooltip
-
-## Next Phase Features
-
-- Inline overlay display using TextEditorDecorationType (Sublime Phantom-style UI)
-- Translation caching
