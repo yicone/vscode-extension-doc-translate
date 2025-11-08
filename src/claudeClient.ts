@@ -54,7 +54,7 @@ Translate this text:
 
     private getModel(): string {
         const config = vscode.workspace.getConfiguration('docTranslate');
-        return config.get<string>('model') || 'claude-3-5-sonnet-20241022';
+        return config.get<string>('model') || 'claude-sonnet-4-5-20250929';
     }
 
     private getTimeout(): number {

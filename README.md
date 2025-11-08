@@ -25,7 +25,7 @@ VSCode extension that translates English docstrings and comments in Python code 
 This extension contributes the following settings:
 
 * `docTranslate.anthropicApiKey`: Anthropic API Key for Claude translation (environment variable `ANTHROPIC_API_KEY` takes precedence)
-* `docTranslate.model`: Claude model to use for translation (default: `claude-3-5-sonnet-20241022`)
+* `docTranslate.model`: Claude model to use for translation (default: `claude-sonnet-4-5-20250929`)
 * `docTranslate.timeout`: API request timeout in milliseconds (default: `30000`)
 
 ## Usage
