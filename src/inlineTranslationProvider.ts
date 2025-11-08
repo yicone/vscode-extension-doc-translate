@@ -3,20 +3,28 @@ import { TranslationCache } from './translationCache';
 import { logger } from './logger';
 
 export class InlineTranslationProvider {
-    private decorationType: vscode.TextEditorDecorationType;
+    private commentDecorationType: vscode.TextEditorDecorationType;
+    private docstringDecorationType: vscode.TextEditorDecorationType;
     private cache: TranslationCache;
-    private decorations = new Map<string, vscode.DecorationOptions[]>();
+    private commentDecorations = new Map<string, vscode.DecorationOptions[]>();
+    private docstringDecorations = new Map<string, vscode.DecorationOptions[]>();
 
     constructor(cache: TranslationCache) {
         this.cache = cache;
 
-        // Create decoration type for inline translations
-        this.decorationType = vscode.window.createTextEditorDecorationType({
+        // Create decoration type for inline comment translations (right side)
+        this.commentDecorationType = vscode.window.createTextEditorDecorationType({
             after: {
                 color: new vscode.ThemeColor('editorCodeLens.foreground'),
                 fontStyle: 'italic',
                 margin: '0 0 0 2em'
             },
+            isWholeLine: false
+        });
+
+        // Create decoration type for docstring translations (overlay/replace)
+        this.docstringDecorationType = vscode.window.createTextEditorDecorationType({
+            opacity: '0',  // Hide original text
             isWholeLine: false
         });
     }
@@ -26,38 +34,57 @@ export class InlineTranslationProvider {
      */
     async updateInlineTranslations(
         document: vscode.TextDocument,
-        blocks: Array<{ text: string; range: vscode.Range }>
+        blocks: Array<{ text: string; range: vscode.Range; type: 'docstring' | 'comment' }>
     ): Promise<void> {
         const fileKey = document.uri.toString();
-        const decorations: vscode.DecorationOptions[] = [];
+        const commentDecorations: vscode.DecorationOptions[] = [];
+        const docstringDecorations: vscode.DecorationOptions[] = [];
 
         logger.debug(`Updating inline translations for ${blocks.length} blocks`);
 
         for (const block of blocks) {
             const translation = this.cache.get(block.text);
-            if (translation) {
-                // Add decoration at the end of the docstring range
+            if (!translation) {
+                continue;
+            }
+
+            if (block.type === 'comment') {
+                // Comment: display on the right side
                 const decoration: vscode.DecorationOptions = {
                     range: new vscode.Range(block.range.end, block.range.end),
                     renderOptions: {
                         after: {
-                            contentText: ` ┆ ${translation.replace(/\n/g, ' ')}`,
+                            contentText: ` → ${translation.replace(/\n/g, ' ')}`,
                             color: new vscode.ThemeColor('editorCodeLens.foreground'),
                             fontStyle: 'italic'
                         }
                     }
                 };
-                decorations.push(decoration);
+                commentDecorations.push(decoration);
+            } else {
+                // Docstring: hide original and show translation overlay
+                const hideDecoration: vscode.DecorationOptions = {
+                    range: block.range,
+                    renderOptions: {
+                        before: {
+                            contentText: `"""${translation}"""`,
+                            color: new vscode.ThemeColor('editorCodeLens.foreground'),
+                            fontStyle: 'italic'
+                        }
+                    }
+                };
+                docstringDecorations.push(hideDecoration);
             }
         }
 
         // Store decorations for this file
-        this.decorations.set(fileKey, decorations);
+        this.commentDecorations.set(fileKey, commentDecorations);
+        this.docstringDecorations.set(fileKey, docstringDecorations);
 
         // Apply decorations to visible editors
         this.applyDecorationsToVisibleEditors(document);
 
-        logger.info(`Applied ${decorations.length} inline translations`);
+        logger.info(`Applied ${commentDecorations.length} comment translations and ${docstringDecorations.length} docstring translations`);
     }
 
     /**
@@ -65,11 +92,13 @@ export class InlineTranslationProvider {
      */
     private applyDecorationsToVisibleEditors(document: vscode.TextDocument): void {
         const fileKey = document.uri.toString();
-        const decorations = this.decorations.get(fileKey) || [];
+        const commentDecorations = this.commentDecorations.get(fileKey) || [];
+        const docstringDecorations = this.docstringDecorations.get(fileKey) || [];
 
         for (const editor of vscode.window.visibleTextEditors) {
             if (editor.document.uri.toString() === fileKey) {
-                editor.setDecorations(this.decorationType, decorations);
+                editor.setDecorations(this.commentDecorationType, commentDecorations);
+                editor.setDecorations(this.docstringDecorationType, docstringDecorations);
             }
         }
     }
@@ -79,12 +108,14 @@ export class InlineTranslationProvider {
      */
     clearFileDecorations(uri: vscode.Uri): void {
         const fileKey = uri.toString();
-        this.decorations.delete(fileKey);
+        this.commentDecorations.delete(fileKey);
+        this.docstringDecorations.delete(fileKey);
 
         // Clear decorations from visible editors
         for (const editor of vscode.window.visibleTextEditors) {
             if (editor.document.uri.toString() === fileKey) {
-                editor.setDecorations(this.decorationType, []);
+                editor.setDecorations(this.commentDecorationType, []);
+                editor.setDecorations(this.docstringDecorationType, []);
             }
         }
 
@@ -95,11 +126,13 @@ export class InlineTranslationProvider {
      * Clear all inline translations
      */
     clearAllDecorations(): void {
-        this.decorations.clear();
+        this.commentDecorations.clear();
+        this.docstringDecorations.clear();
 
         // Clear from all visible editors
         for (const editor of vscode.window.visibleTextEditors) {
-            editor.setDecorations(this.decorationType, []);
+            editor.setDecorations(this.commentDecorationType, []);
+            editor.setDecorations(this.docstringDecorationType, []);
         }
 
         logger.info('Cleared all inline translations');
@@ -111,8 +144,10 @@ export class InlineTranslationProvider {
     refreshVisibleEditors(): void {
         for (const editor of vscode.window.visibleTextEditors) {
             const fileKey = editor.document.uri.toString();
-            const decorations = this.decorations.get(fileKey) || [];
-            editor.setDecorations(this.decorationType, decorations);
+            const commentDecorations = this.commentDecorations.get(fileKey) || [];
+            const docstringDecorations = this.docstringDecorations.get(fileKey) || [];
+            editor.setDecorations(this.commentDecorationType, commentDecorations);
+            editor.setDecorations(this.docstringDecorationType, docstringDecorations);
         }
     }
 
@@ -120,6 +155,7 @@ export class InlineTranslationProvider {
      * Dispose resources
      */
     dispose(): void {
-        this.decorationType.dispose();
+        this.commentDecorationType.dispose();
+        this.docstringDecorationType.dispose();
     }
 }

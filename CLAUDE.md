@@ -4,24 +4,26 @@
 
 ## プロジェクト概要
 
-Claude APIを使用して英語のdocstringを日本語に翻訳するVSCode拡張機能です。Pythonファイル対象で、インライン表示（Virtual Text）で翻訳を提供します。
+Claude APIを使用して英語のdocstringとコメントを日本語に翻訳するVSCode拡張機能です。Pythonファイル対象で、2種類のインライン表示方式で翻訳を提供します。
 
 **対象ユースケース:** 新人オンボーディング、コードレビュー、生産性向上
 
 ## プロジェクトステータス
 
-v0.1.0リリース済み - バックグラウンド事前翻訳＋インライン表示機能を含む完全なMVP実装
+v0.1.0リリース済み - バックグラウンド事前翻訳＋2種類のインライン表示機能を含む完全なMVP実装
 
 ## アーキテクチャ
 
 ### コアコンポーネント
 
-- **UI**: インライン翻訳表示（Virtual Text方式）- docstring下に半透明斜体で常時表示
+- **UI**: 2種類のインライン翻訳表示
+  - **コメント**: 行の右側に表示（Virtual Text方式）
+  - **Docstring**: 元のテキストを隠して翻訳を上書き表示（Overlay方式）
 - **対象言語**: Python
 - **翻訳方向**: 英語 → 日本語
-- **翻訳対象**: docstringのみ（`"""`と`'''`の両方）
+- **翻訳対象**: docstring（`"""`と`'''`）とインラインコメント（`#`）
 - **翻訳エンジン**: Claude API（Claude 4.5 Haiku）
-- **検出方法**: LSP（Language Server Protocol / Pylance）でdocstringを検出
+- **検出方法**: LSP（Language Server Protocol / Pylance）でdocstringを検出、正規表現でコメントを検出
 - **翻訳タイミング**: ファイルを開いた時・保存した時に全翻訳をバックグラウンド実行
 
 ### 翻訳ポリシー
@@ -36,18 +38,23 @@ v0.1.0リリース済み - バックグラウンド事前翻訳＋インライ�
    - `vscode.executeDocumentSymbolProvider` でシンボル情報取得
    - シンボル定義直後からdocstringを抽出
 
-2. **バックグラウンド事前翻訳**
-   - ファイルオープン・保存時に全docstringを自動翻訳
+2. **正規表現ベースのコメント検出**
+   - 文字列内の`#`を除外してコメントを検出
+   - 各行のインラインコメントを抽出
+
+3. **バックグラウンド事前翻訳**
+   - ファイルオープン・保存時に全docstringとコメントを自動翻訳
    - ステータスバーに進捗表示
    - キャッシュに保存
 
-3. **インライン翻訳表示（Virtual Text）**
-   - `TextEditorDecorationType` を使用してdocstring下に翻訳を表示
+4. **2種類のインライン翻訳表示**
+   - **コメント**: `TextEditorDecorationType` の `after` プロパティで行の右側に表示
+   - **Docstring**: `opacity: 0` で元のテキストを隠し、`before` で翻訳を上書き表示
    - 半透明の斜体でグレーアウト表示
    - 常時表示、ホバー不要
    - ファイルは変更されない（見た目のみ）
 
-4. **翻訳キャッシュ**
+5. **翻訳キャッシュ**
    - メモリ内ハッシュマップ（SHA-256）でキャッシュ
    - ファイル編集時にキャッシュ無効化
    - 保存時は変更されていない部分はキャッシュを活用
@@ -55,10 +62,10 @@ v0.1.0リリース済み - バックグラウンド事前翻訳＋インライ�
 ## ファイル構成
 
 - `src/extension.ts` - 拡張機能のエントリーポイント、イベントハンドラー登録
-- `src/inlineTranslationProvider.ts` - インライン翻訳表示プロバイダー（Virtual Text実装）
+- `src/inlineTranslationProvider.ts` - インライン翻訳表示プロバイダー（2種類のdecoration実装）
 - `src/preTranslationService.ts` - バックグラウンド事前翻訳サービス
 - `src/claudeClient.ts` - Claude API クライアント
-- `src/pythonBlockDetector.ts` - LSPベースのdocstring検出
+- `src/pythonBlockDetector.ts` - LSPベースのdocstring検出＋正規表現ベースのコメント検出
 - `src/translationCache.ts` - 翻訳キャッシュ（SHA-256ハッシュベース）
 - `src/logger.ts` - ログ出力
 

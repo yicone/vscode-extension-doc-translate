@@ -4,6 +4,7 @@ import { logger } from './logger';
 export interface TextBlock {
     text: string;
     range: vscode.Range;
+    type: 'docstring' | 'comment';
 }
 
 export class PythonBlockDetector {
@@ -67,7 +68,7 @@ export class PythonBlockDetector {
             // Try to extract docstring starting from the first line after symbol definition
             const docstring = this.extractDocstringFromLine(document, symbolBodyStart);
             if (docstring && docstring.range.contains(position)) {
-                return docstring;
+                return { ...docstring, type: 'docstring' as const };
             }
 
             return null;
@@ -101,7 +102,7 @@ export class PythonBlockDetector {
     /**
      * Extract docstring starting from a specific line
      */
-    public extractDocstringFromLine(document: vscode.TextDocument, startLine: number): TextBlock | null {
+    public extractDocstringFromLine(document: vscode.TextDocument, startLine: number): Omit<TextBlock, 'type'> | null {
         if (startLine >= document.lineCount) {
             return null;
         }
@@ -128,7 +129,7 @@ export class PythonBlockDetector {
         document: vscode.TextDocument,
         startLine: number,
         quote: string
-    ): TextBlock | null {
+    ): Omit<TextBlock, 'type'> | null {
         const firstLineText = document.lineAt(startLine).text;
         const quoteIndex = firstLineText.indexOf(quote);
 
@@ -169,5 +170,64 @@ export class PythonBlockDetector {
         const content = fullText.substring(quote.length, fullText.length - quote.length).trim();
 
         return { text: content, range };
+    }
+
+    /**
+     * Extract inline comment from a line
+     */
+    public extractInlineComment(document: vscode.TextDocument, lineNumber: number): Omit<TextBlock, 'type'> | null {
+        if (lineNumber >= document.lineCount) {
+            return null;
+        }
+
+        const line = document.lineAt(lineNumber);
+        const text = line.text;
+
+        // Find # that is not inside a string
+        const hashIndex = this.findCommentStart(text);
+        if (hashIndex === -1) {
+            return null;
+        }
+
+        // Extract comment text
+        const commentText = text.substring(hashIndex + 1).trim();
+        if (commentText === '') {
+            return null;
+        }
+
+        const range = new vscode.Range(
+            lineNumber,
+            hashIndex,
+            lineNumber,
+            text.length
+        );
+
+        return { text: commentText, range };
+    }
+
+    /**
+     * Find the start position of a comment (#) that is not inside a string
+     */
+    private findCommentStart(line: string): number {
+        let inSingleQuote = false;
+        let inDoubleQuote = false;
+        let prevChar = '';
+
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+
+            // Toggle quote states
+            if (char === "'" && prevChar !== '\\' && !inDoubleQuote) {
+                inSingleQuote = !inSingleQuote;
+            } else if (char === '"' && prevChar !== '\\' && !inSingleQuote) {
+                inDoubleQuote = !inDoubleQuote;
+            } else if (char === '#' && !inSingleQuote && !inDoubleQuote) {
+                return i;
+            }
+
+            prevChar = char;
+        }
+
+        return -1;
     }
 }

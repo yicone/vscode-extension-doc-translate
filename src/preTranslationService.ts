@@ -116,10 +116,10 @@ export class PreTranslationService {
     /**
      * Extract all translatable blocks from document
      */
-    private async extractAllBlocks(document: vscode.TextDocument): Promise<Array<{ text: string; range: vscode.Range }>> {
-        const blocks: Array<{ text: string; range: vscode.Range }> = [];
+    private async extractAllBlocks(document: vscode.TextDocument): Promise<Array<{ text: string; range: vscode.Range; type: 'docstring' | 'comment' }>> {
+        const blocks: Array<{ text: string; range: vscode.Range; type: 'docstring' | 'comment' }> = [];
 
-        // Extract docstrings via LSP
+        // 1. Extract docstrings via LSP
         try {
             const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
                 'vscode.executeDocumentSymbolProvider',
@@ -133,9 +133,12 @@ export class PreTranslationService {
             logger.error('Failed to get symbols from LSP', error);
         }
 
+        // 2. Extract inline comments
+        this.extractInlineComments(document, blocks);
+
         // Deduplicate blocks by text
         const uniqueBlocks = this.deduplicateBlocks(blocks);
-        logger.debug(`Extracted ${blocks.length} blocks, ${uniqueBlocks.length} unique`);
+        logger.debug(`Extracted ${blocks.length} blocks (${uniqueBlocks.filter(b => b.type === 'docstring').length} docstrings, ${uniqueBlocks.filter(b => b.type === 'comment').length} comments), ${uniqueBlocks.length} unique`);
 
         return uniqueBlocks;
     }
@@ -146,7 +149,7 @@ export class PreTranslationService {
     private async extractDocstringsFromSymbols(
         document: vscode.TextDocument,
         symbols: vscode.DocumentSymbol[],
-        blocks: Array<{ text: string; range: vscode.Range }>
+        blocks: Array<{ text: string; range: vscode.Range; type: 'docstring' | 'comment' }>
     ): Promise<void> {
         for (const symbol of symbols) {
             // Try to extract docstring for this symbol
@@ -154,7 +157,7 @@ export class PreTranslationService {
             if (symbolBodyStart < document.lineCount) {
                 const docstring = this.detector.extractDocstringFromLine(document, symbolBodyStart);
                 if (docstring && docstring.text.trim()) {
-                    blocks.push({ text: docstring.text, range: docstring.range });
+                    blocks.push({ text: docstring.text, range: docstring.range, type: 'docstring' });
                     logger.debug(`Extracted docstring from ${symbol.name}: ${docstring.text.substring(0, 30)}...`);
                 }
             }
@@ -167,10 +170,26 @@ export class PreTranslationService {
     }
 
     /**
+     * Extract all inline comments from document
+     */
+    private extractInlineComments(
+        document: vscode.TextDocument,
+        blocks: Array<{ text: string; range: vscode.Range; type: 'docstring' | 'comment' }>
+    ): void {
+        for (let lineNum = 0; lineNum < document.lineCount; lineNum++) {
+            const comment = this.detector.extractInlineComment(document, lineNum);
+            if (comment && comment.text.trim()) {
+                blocks.push({ text: comment.text, range: comment.range, type: 'comment' });
+                logger.debug(`Extracted comment at line ${lineNum}: ${comment.text.substring(0, 30)}...`);
+            }
+        }
+    }
+
+    /**
      * Deduplicate blocks by text content
      */
-    private deduplicateBlocks(blocks: Array<{ text: string; range: vscode.Range }>): Array<{ text: string; range: vscode.Range }> {
-        const seen = new Map<string, { text: string; range: vscode.Range }>();
+    private deduplicateBlocks(blocks: Array<{ text: string; range: vscode.Range; type: 'docstring' | 'comment' }>): Array<{ text: string; range: vscode.Range; type: 'docstring' | 'comment' }> {
+        const seen = new Map<string, { text: string; range: vscode.Range; type: 'docstring' | 'comment' }>();
         for (const block of blocks) {
             if (!seen.has(block.text)) {
                 seen.set(block.text, block);
