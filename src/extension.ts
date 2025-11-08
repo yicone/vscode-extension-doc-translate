@@ -73,12 +73,12 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 	logger.info('File open watcher registered');
 
-	// Watch for file changes (to invalidate pre-translation cache)
+	// Watch for file changes (no action needed - decorations stay visible until save)
 	const onChangeDisposable = vscode.workspace.onDidChangeTextDocument((event) => {
 		if (BlockDetectorFactory.isLanguageSupported(event.document.languageId)) {
-			logger.debug(`Supported file changed: ${event.document.fileName}, invalidating pre-translation cache`);
-			// Only invalidate cache flag, keep decorations visible until next save
-			preTranslationService.invalidateFileCache(event.document.uri);
+			logger.debug(`Supported file changed: ${event.document.fileName}`);
+			// Decorations remain visible during editing
+			// Translation will update on save
 		}
 	});
 	logger.info('File change watcher registered');

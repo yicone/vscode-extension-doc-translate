@@ -13,8 +13,7 @@ export class PreTranslationService {
     private cache: TranslationCache;
     private inlineProvider: InlineTranslationProvider;
     private statusBarItem: vscode.StatusBarItem;
-    private isTranslating = false;
-    private translatedFiles = new Set<string>();
+    private activeTranslations = new Map<string, Promise<void>>();
 
     constructor(cache: TranslationCache, inlineProvider: InlineTranslationProvider) {
         this.cache = cache;
@@ -24,6 +23,7 @@ export class PreTranslationService {
 
     /**
      * Pre-translate all docstrings and comments in a document
+     * Always runs - uses cache when available, translates when not
      */
     async preTranslateDocument(document: vscode.TextDocument): Promise<void> {
         // Only process supported languages
@@ -33,22 +33,31 @@ export class PreTranslationService {
 
         const fileKey = document.uri.toString();
 
-        // If already translated, restore decorations from cache
-        if (this.translatedFiles.has(fileKey)) {
-            logger.debug(`File already pre-translated, restoring decorations: ${document.fileName}`);
-            await this.restoreTranslationsFromCache(document);
+        // If already translating this file, wait for it
+        const existingTranslation = this.activeTranslations.get(fileKey);
+        if (existingTranslation) {
+            logger.debug(`Translation already in progress for: ${document.fileName}, waiting...`);
+            await existingTranslation;
             return;
         }
 
-        // Skip if already translating
-        if (this.isTranslating) {
-            logger.debug('Pre-translation already in progress, skipping');
-            return;
-        }
+        // Create translation promise
+        const translationPromise = this.performTranslation(document);
+        this.activeTranslations.set(fileKey, translationPromise);
 
-        this.isTranslating = true;
+        try {
+            await translationPromise;
+        } finally {
+            this.activeTranslations.delete(fileKey);
+        }
+    }
+
+    /**
+     * Perform translation for a document
+     */
+    private async performTranslation(document: vscode.TextDocument): Promise<void> {
         logger.info('='.repeat(60));
-        logger.info(`Starting pre-translation for: ${document.fileName}`);
+        logger.info(`Translating: ${document.fileName}`);
         logger.info('='.repeat(60));
 
         try {
@@ -57,7 +66,7 @@ export class PreTranslationService {
             logger.info(`Found ${blocks.length} translatable blocks`);
 
             if (blocks.length === 0) {
-                this.translatedFiles.add(fileKey);
+                logger.info('No translatable blocks found');
                 return;
             }
 
@@ -104,22 +113,17 @@ export class PreTranslationService {
             }
 
             const duration = Date.now() - startTime;
-            logger.info(`Pre-translation completed: ${translated}/${blocks.length} blocks in ${duration}ms`);
+            logger.info(`Translation completed: ${translated}/${blocks.length} blocks in ${duration}ms`);
             logger.info('='.repeat(60));
-
-            // Mark as translated
-            this.translatedFiles.add(fileKey);
 
             // Show completion message
             this.statusBarItem.text = `$(check) Translated ${translated} blocks`;
             setTimeout(() => this.statusBarItem.hide(), 3000);
 
         } catch (error) {
-            logger.error('Pre-translation failed', error);
+            logger.error('Translation failed', error);
             this.statusBarItem.text = `$(error) Translation failed`;
             setTimeout(() => this.statusBarItem.hide(), 3000);
-        } finally {
-            this.isTranslating = false;
         }
     }
 
@@ -187,61 +191,19 @@ export class PreTranslationService {
     }
 
     /**
-     * Restore translations from cache for already translated file
-     */
-    private async restoreTranslationsFromCache(document: vscode.TextDocument): Promise<void> {
-        try {
-            // Extract all blocks
-            const blocks = await this.extractAllBlocks(document);
-
-            if (blocks.length === 0) {
-                logger.debug('No blocks to restore');
-                return;
-            }
-
-            // Filter blocks that have cached translations
-            const cachedBlocks = blocks.filter(block => this.cache.get(block.text));
-
-            if (cachedBlocks.length > 0) {
-                logger.debug(`Restoring ${cachedBlocks.length} cached translations`);
-                // Update inline translations with cached data
-                await this.inlineProvider.updateInlineTranslations(document, blocks);
-            } else {
-                logger.debug('No cached translations available for this file');
-            }
-        } catch (error) {
-            logger.error('Failed to restore translations from cache', error);
-        }
-    }
-
-    /**
-     * Invalidate pre-translation cache for a file (keeps decorations visible)
-     * Use this when file is edited - decorations stay until next save/translation
-     */
-    invalidateFileCache(uri: vscode.Uri): void {
-        const fileKey = uri.toString();
-        this.translatedFiles.delete(fileKey);
-        logger.debug(`Invalidated pre-translation cache for: ${uri.fsPath}`);
-    }
-
-    /**
-     * Clear pre-translation cache and decorations for a file
-     * Use this when explicitly clearing cache (e.g., user command)
+     * Clear decorations for a file (called when explicitly clearing cache)
      */
     clearFileCache(uri: vscode.Uri): void {
-        const fileKey = uri.toString();
-        this.translatedFiles.delete(fileKey);
         this.inlineProvider.clearFileDecorations(uri);
-        logger.info(`Cleared pre-translation cache and decorations for: ${uri.fsPath}`);
+        logger.info(`Cleared decorations for: ${uri.fsPath}`);
     }
 
     /**
-     * Clear all pre-translation caches
+     * Clear all decorations
      */
     clearAllCaches(): void {
-        this.translatedFiles.clear();
         this.inlineProvider.clearAllDecorations();
-        logger.info('Cleared all pre-translation caches');
+        logger.info('Cleared all decorations');
     }
 
     /**
