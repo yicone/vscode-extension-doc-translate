@@ -1,9 +1,10 @@
 import * as vscode from 'vscode';
-import { TranslationProviderFactory } from './translationProviderFactory';
+import { TranslationProviderFactory } from '../providers/translationProviderFactory';
 import { TranslationCache } from './translationCache';
-import { BlockDetectorFactory } from './blockDetectorFactory';
+import { BlockDetectorFactory } from '../detectors/blockDetectorFactory';
 import { InlineTranslationProvider } from './inlineTranslationProvider';
-import { logger } from './logger';
+import { logger } from '../utils/logger';
+import { ConfigManager } from '../utils/config';
 
 // Maximum number of concurrent translation requests
 const MAX_CONCURRENT_REQUESTS = 5;
@@ -135,8 +136,7 @@ export class PreTranslationService {
 
         // Get translation provider and language settings
         const provider = TranslationProviderFactory.getProvider();
-        const config = vscode.workspace.getConfiguration('docTranslate');
-        const targetLang = config.get<string>('targetLang') || 'ja';
+        const targetLang = ConfigManager.getTargetLang();
 
         // Process blocks in batches
         while (index < blocksToTranslate.length) {

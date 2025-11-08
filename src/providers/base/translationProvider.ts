@@ -17,15 +17,10 @@ export interface ITranslationProvider {
 }
 
 /**
- * Supported LLM providers
- */
-export type LLMProvider = 'anthropic' | 'openai' | 'gemini';
-
-/**
  * Configuration for translation
  */
 export interface TranslationConfig {
-    provider: LLMProvider;
+    provider: string;
     targetLang: string;
     apiKey?: string;
     model?: string;

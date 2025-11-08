@@ -1,6 +1,6 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
-import { logger } from './logger';
+import { logger } from '../utils/logger';
 
 const CACHE_STORAGE_KEY = 'doc-translate.translationCache';
 

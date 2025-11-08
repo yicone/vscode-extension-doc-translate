@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { TranslationCache } from './translationCache';
-import { logger } from './logger';
-import { formatDocstring, formatComment } from './commentFormatter';
+import { logger } from '../utils/logger';
+import { formatDocstring, formatComment } from '../utils/commentFormatter';
 
 interface DocstringDecorationGroup {
     blockRange: vscode.Range;  // Original docstring block range

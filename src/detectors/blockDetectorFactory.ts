@@ -1,8 +1,8 @@
-import { IBlockDetector } from './blockDetector';
+import { IBlockDetector } from './base/blockDetector';
 import { PythonBlockDetector } from './pythonBlockDetector';
 import { JavaScriptBlockDetector } from './javascriptBlockDetector';
 import { GoBlockDetector } from './goBlockDetector';
-import { logger } from './logger';
+import { logger } from '../utils/logger';
 
 /**
  * Factory for creating block detectors based on language ID

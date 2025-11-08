@@ -1,19 +1,20 @@
 import Anthropic from '@anthropic-ai/sdk';
-import * as vscode from 'vscode';
-import { logger } from './logger';
-import { ITranslationProvider } from './translationProvider';
-import { withRetry, DEFAULT_RETRY_CONFIG } from './retryHelper';
-import { isTranslationNeeded } from './languageDetector';
+import { logger } from '../utils/logger';
+import { ITranslationProvider } from './base/translationProvider';
+import { BaseProvider } from './base/baseProvider';
+import { withRetry } from '../utils/retryHelper';
+import { ConfigManager } from '../utils/config';
 
-export class AnthropicProvider implements ITranslationProvider {
+export class AnthropicProvider extends BaseProvider implements ITranslationProvider {
     private client: Anthropic | null = null;
 
     constructor() {
+        super();
         this.initializeClient();
     }
 
     private initializeClient(): void {
-        const apiKey = this.getApiKey();
+        const apiKey = ConfigManager.getAnthropicApiKey();
         if (apiKey) {
             this.client = new Anthropic({ apiKey });
             logger.info('Anthropic client initialized successfully');
@@ -22,79 +23,17 @@ export class AnthropicProvider implements ITranslationProvider {
         }
     }
 
-    private getApiKey(): string | undefined {
-        // Environment variable takes precedence
-        const envKey = process.env.ANTHROPIC_API_KEY;
-        if (envKey) {
-            logger.debug('Using Anthropic API key from environment variable ANTHROPIC_API_KEY');
-            return envKey;
-        }
-
-        // Fall back to VSCode configuration
-        const config = vscode.workspace.getConfiguration('docTranslate');
-        const configKey = config.get<string>('anthropicApiKey');
-        if (configKey && configKey.trim() !== '') {
-            logger.debug('Using Anthropic API key from VSCode settings');
-            return configKey;
-        }
-
-        logger.warn('No Anthropic API key found in environment variable or settings');
-        return undefined;
-    }
-
-    private getModel(): string {
-        const config = vscode.workspace.getConfiguration('docTranslate');
-        return config.get<string>('model') || 'claude-haiku-4-5-20251001';
-    }
-
-    private getTimeout(): number {
-        const config = vscode.workspace.getConfiguration('docTranslate');
-        return config.get<number>('timeout') || 30000;
-    }
-
-    private buildPrompt(text: string, targetLang: string): string {
-        const langMap: { [key: string]: string } = {
-            'en': 'English',
-            'ja': 'Japanese',
-            'zh': 'Chinese',
-            'ko': 'Korean',
-            'fr': 'French',
-            'de': 'German',
-            'es': 'Spanish',
-            'it': 'Italian',
-            'pt': 'Portuguese',
-            'ru': 'Russian'
-        };
-
-        const targetLanguage = langMap[targetLang] || targetLang;
-
-        return `You are a translation assistant specialized in software engineering context.
-Translate the given text into natural ${targetLanguage}.
-
-Rules:
-
-Preserve technical terms (library names, function names, class names, variable names) as they are.
-
-Prefer natural ${targetLanguage} rather than literal translation.
-
-Output ONLY the translated ${targetLanguage} text. No explanation.
-
-Translate this text:
-${text}`;
-    }
-
     async translate(text: string, targetLang: string): Promise<string> {
         logger.info(`Anthropic translation request received (text length: ${text.length} chars, target: ${targetLang})`);
         logger.debug('Text to translate:', { text: text.substring(0, 100) + (text.length > 100 ? '...' : '') });
 
         // Check if translation is needed (skip if already in target language)
-        if (!await isTranslationNeeded(text, targetLang)) {
-            logger.info('Translation not needed, returning original text');
-            return text;
+        const skipResult = await this.checkTranslationNeeded(text, targetLang);
+        if (skipResult !== null) {
+            return skipResult;
         }
 
         if (!this.client) {
-            // Re-initialize in case API key was added after extension activation
             logger.info('Client not initialized, attempting re-initialization');
             this.initializeClient();
             if (!this.client) {
@@ -105,17 +44,9 @@ ${text}`;
         }
 
         const prompt = this.buildPrompt(text, targetLang);
-        const model = this.getModel();
-        const timeout = this.getTimeout();
-
-        // Get retry configuration from settings
-        const config = vscode.workspace.getConfiguration('docTranslate');
-        const retryConfig = {
-            maxRetries: config.get<number>('maxRetries') || DEFAULT_RETRY_CONFIG.maxRetries,
-            initialDelayMs: config.get<number>('retryInitialDelay') || DEFAULT_RETRY_CONFIG.initialDelayMs,
-            maxDelayMs: DEFAULT_RETRY_CONFIG.maxDelayMs,
-            backoffMultiplier: DEFAULT_RETRY_CONFIG.backoffMultiplier
-        };
+        const model = ConfigManager.getAnthropicModel();
+        const timeout = ConfigManager.getTimeout();
+        const retryConfig = ConfigManager.getRetryConfig();
 
         logger.debug(`Using model: ${model}, timeout: ${timeout}ms`);
         logger.info('='.repeat(60));
@@ -125,7 +56,6 @@ ${text}`;
         logger.info('='.repeat(60));
 
         try {
-            // Use retry logic for rate limit handling
             const translation = await withRetry(
                 async () => {
                     const controller = new AbortController();

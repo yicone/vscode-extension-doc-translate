@@ -1,9 +1,9 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { PythonBlockDetector } from '../pythonBlockDetector';
-import { JavaScriptBlockDetector } from '../javascriptBlockDetector';
-import { GoBlockDetector } from '../goBlockDetector';
+import { PythonBlockDetector } from '../detectors/pythonBlockDetector';
+import { JavaScriptBlockDetector } from '../detectors/javascriptBlockDetector';
+import { GoBlockDetector } from '../detectors/goBlockDetector';
 
 suite('Block Detector Test Suite', () => {
     const assetsPath = path.join(__dirname, '..', '..', 'src', 'test', 'assets');

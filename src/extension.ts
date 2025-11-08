@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
-import { TranslationProviderFactory } from './translationProviderFactory';
-import { TranslationCache } from './translationCache';
-import { PreTranslationService } from './preTranslationService';
-import { InlineTranslationProvider } from './inlineTranslationProvider';
-import { BlockDetectorFactory } from './blockDetectorFactory';
-import { logger } from './logger';
+import { TranslationProviderFactory } from './providers/translationProviderFactory';
+import { TranslationCache } from './services/translationCache';
+import { PreTranslationService } from './services/preTranslationService';
+import { InlineTranslationProvider } from './services/inlineTranslationProvider';
+import { BlockDetectorFactory } from './detectors/blockDetectorFactory';
+import { logger } from './utils/logger';
 
 export function activate(context: vscode.ExtensionContext) {
 	logger.info('='.repeat(60));

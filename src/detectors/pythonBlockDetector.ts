@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { logger } from './logger';
-import { IBlockDetector, TextBlock } from './blockDetector';
+import { logger } from '../utils/logger';
+import { IBlockDetector, TextBlock } from './base/blockDetector';
 
 export class PythonBlockDetector implements IBlockDetector {
     /**
