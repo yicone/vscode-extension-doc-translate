@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { logger } from './logger';
 
 export interface TextBlock {
     text: string;
@@ -11,24 +12,33 @@ export class PythonBlockDetector {
      * Priority: 1) docstring, 2) comment block, 3) inline comment
      */
     extractBlock(document: vscode.TextDocument, position: vscode.Position): TextBlock | null {
+        logger.debug(`Extracting block at position: line ${position.line}, char ${position.character}`);
+
         // First, try to detect docstring
         const docstring = this.extractDocstring(document, position);
         if (docstring) {
+            logger.info(`Detected docstring block (${docstring.range.start.line}-${docstring.range.end.line})`);
+            logger.debug('Docstring content:', { text: docstring.text.substring(0, 50) + '...' });
             return docstring;
         }
 
         // Second, try to detect comment block
         const commentBlock = this.extractCommentBlock(document, position);
         if (commentBlock) {
+            logger.info(`Detected comment block (${commentBlock.range.start.line}-${commentBlock.range.end.line})`);
+            logger.debug('Comment block content:', { text: commentBlock.text.substring(0, 50) + '...' });
             return commentBlock;
         }
 
         // Third, try to detect inline comment
         const inlineComment = this.extractInlineComment(document, position);
         if (inlineComment) {
+            logger.info(`Detected inline comment at line ${inlineComment.range.start.line}`);
+            logger.debug('Inline comment:', { text: inlineComment.text });
             return inlineComment;
         }
 
+        logger.debug('No translatable block found at this position');
         return null;
     }
 

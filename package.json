@@ -16,6 +16,10 @@
       {
         "command": "doc-translate.clearCache",
         "title": "Doc Translate: Clear Translation Cache"
+      },
+      {
+        "command": "doc-translate.showLogs",
+        "title": "Doc Translate: Show Logs"
       }
     ],
     "configuration": {

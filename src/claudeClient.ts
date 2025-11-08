@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import * as vscode from 'vscode';
+import { logger } from './logger';
 
 export class ClaudeClient {
     private client: Anthropic | null = null;
@@ -25,6 +26,9 @@ Translate this text:
         const apiKey = this.getApiKey();
         if (apiKey) {
             this.client = new Anthropic({ apiKey });
+            logger.info('Claude client initialized successfully');
+        } else {
+            logger.warn('No API key found. Client not initialized.');
         }
     }
 
@@ -32,6 +36,7 @@ Translate this text:
         // Environment variable takes precedence
         const envKey = process.env.ANTHROPIC_API_KEY;
         if (envKey) {
+            logger.debug('Using API key from environment variable ANTHROPIC_API_KEY');
             return envKey;
         }
 
@@ -39,9 +44,11 @@ Translate this text:
         const config = vscode.workspace.getConfiguration('docTranslate');
         const configKey = config.get<string>('anthropicApiKey');
         if (configKey && configKey.trim() !== '') {
+            logger.debug('Using API key from VSCode settings');
             return configKey;
         }
 
+        logger.warn('No API key found in environment variable or settings');
         return undefined;
     }
 
@@ -56,11 +63,17 @@ Translate this text:
     }
 
     async translate(text: string): Promise<string> {
+        logger.info(`Translation request received (text length: ${text.length} chars)`);
+        logger.debug('Text to translate:', { text: text.substring(0, 100) + (text.length > 100 ? '...' : '') });
+
         if (!this.client) {
             // Re-initialize in case API key was added after extension activation
+            logger.info('Client not initialized, attempting re-initialization');
             this.initializeClient();
             if (!this.client) {
-                throw new Error('API key not configured. Please set ANTHROPIC_API_KEY environment variable or configure docTranslate.anthropicApiKey in settings.');
+                const errorMsg = 'API key not configured. Please set ANTHROPIC_API_KEY environment variable or configure docTranslate.anthropicApiKey in settings.';
+                logger.error(errorMsg);
+                throw new Error(errorMsg);
             }
         }
 
@@ -68,9 +81,14 @@ Translate this text:
         const model = this.getModel();
         const timeout = this.getTimeout();
 
+        logger.debug(`Using model: ${model}, timeout: ${timeout}ms`);
+
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+            logger.info('Sending request to Claude API...');
+            const startTime = Date.now();
 
             const response = await this.client.messages.create(
                 {
@@ -89,6 +107,8 @@ Translate this text:
             );
 
             clearTimeout(timeoutId);
+            const duration = Date.now() - startTime;
+            logger.info(`Claude API response received (${duration}ms)`);
 
             if (response.content.length === 0) {
                 throw new Error('Empty response from Claude API');
@@ -99,17 +119,25 @@ Translate this text:
                 throw new Error('Unexpected response type from Claude API');
             }
 
-            return content.text.trim();
+            const translation = content.text.trim();
+            logger.info('Translation successful');
+            logger.debug('Translation result:', { translation: translation.substring(0, 100) + (translation.length > 100 ? '...' : '') });
+
+            return translation;
         } catch (error: any) {
             if (error.name === 'AbortError') {
-                throw new Error(`Translation request timed out after ${timeout}ms`);
+                const errorMsg = `Translation request timed out after ${timeout}ms`;
+                logger.error(errorMsg);
+                throw new Error(errorMsg);
             }
+            logger.error('Translation failed', error);
             throw new Error(`Translation failed: ${error.message}`);
         }
     }
 
     // Re-initialize client when configuration changes
     updateConfiguration(): void {
+        logger.info('Configuration changed, re-initializing client');
         this.initializeClient();
     }
 }

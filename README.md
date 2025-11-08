@@ -41,6 +41,24 @@ This extension contributes the following settings:
 ## Commands
 
 * `Doc Translate: Clear Translation Cache`: Clear the in-memory translation cache
+* `Doc Translate: Show Logs`: Open the output channel to view detailed logs
+
+## Debugging
+
+To view detailed logs:
+
+1. Open Command Palette (`Cmd+Shift+P` or `Ctrl+Shift+P`)
+2. Run `Doc Translate: Show Logs`
+3. The "Doc Translate" output channel will show detailed logs including:
+   - Extension activation status
+   - API key detection
+   - Block detection results
+   - Translation requests and responses
+   - Cache hits/misses
+   - Error details
+
+Alternatively, you can open the output panel manually:
+- View → Output → Select "Doc Translate" from the dropdown
 
 ## Known Issues
 
