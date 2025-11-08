@@ -13,7 +13,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Create Claude client and cache
 	const claudeClient = new ClaudeClient();
-	const cache = new TranslationCache();
+	const cache = new TranslationCache(context);
 	logger.info('Claude client and cache created');
 
 	// Create inline translation provider
