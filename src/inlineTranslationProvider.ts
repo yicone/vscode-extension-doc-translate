@@ -26,7 +26,9 @@ export class InlineTranslationProvider {
         // Create decoration type for docstring translations (overlay/replace)
         this.docstringDecorationType = vscode.window.createTextEditorDecorationType({
             opacity: '0',  // Hide original text
-            isWholeLine: false
+            color: 'transparent',  // Make text color transparent
+            isWholeLine: false,
+            rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
         });
     }
 
@@ -69,11 +71,17 @@ export class InlineTranslationProvider {
                 const endLine = block.range.end.line;
                 const startCol = block.range.start.character;
 
-                // Hide the entire docstring range
-                const hideDecoration: vscode.DecorationOptions = {
-                    range: block.range
-                };
-                docstringDecorations.push(hideDecoration);
+                // Process each line of the original docstring
+                for (let lineNum = startLine; lineNum <= endLine; lineNum++) {
+                    const line = document.lineAt(lineNum);
+                    const lineRange = new vscode.Range(lineNum, 0, lineNum, line.text.length);
+
+                    // Hide this line
+                    const hideLineDecoration: vscode.DecorationOptions = {
+                        range: lineRange
+                    };
+                    docstringDecorations.push(hideLineDecoration);
+                }
 
                 // Show translation with proper formatting
                 // First line: opening quotes + first line of translation
