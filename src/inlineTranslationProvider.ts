@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { TranslationCache } from './translationCache';
 import { logger } from './logger';
+import { formatDocstring, formatComment } from './commentFormatter';
 
 interface DocstringDecorationGroup {
     blockRange: vscode.Range;  // Original docstring block range
@@ -57,11 +58,12 @@ export class InlineTranslationProvider {
 
             if (block.type === 'comment') {
                 // Comment: display on the right side
+                const formattedComment = formatComment(translation, document.languageId);
                 const decoration: vscode.DecorationOptions = {
                     range: new vscode.Range(block.range.end, block.range.end),
                     renderOptions: {
                         after: {
-                            contentText: ` → ${translation.replace(/\n/g, ' ')}`,
+                            contentText: ` → ${formattedComment}`,
                             color: new vscode.ThemeColor('editorCodeLens.foreground'),
                             fontStyle: 'italic'
                         }
@@ -70,15 +72,18 @@ export class InlineTranslationProvider {
                 commentDecorations.push(decoration);
             } else {
                 // Docstring: hide original and show translation overlay (multi-line)
-                const translationLines = translation.split('\n');
                 const startLine = block.range.start.line;
                 const endLine = block.range.end.line;
                 const startCol = block.range.start.character;
+                const indentation = ' '.repeat(startCol);
+
+                // Format translation with language-specific comment syntax
+                const formattedLines = formatDocstring(translation, document.languageId, indentation);
 
                 // Create a group for this docstring
                 const groupDecorations: vscode.DecorationOptions[] = [];
 
-                // Process each line of the original docstring
+                // Process each line of the original docstring (hide them)
                 for (let lineNum = startLine; lineNum <= endLine; lineNum++) {
                     const line = document.lineAt(lineNum);
                     const lineRange = new vscode.Range(lineNum, 0, lineNum, line.text.length);
@@ -90,54 +95,20 @@ export class InlineTranslationProvider {
                     groupDecorations.push(hideLineDecoration);
                 }
 
-                // Show translation with proper formatting
-                // First line: opening quotes + first line of translation
-                const firstLineContent = translationLines.length === 1
-                    ? `"""${translationLines[0]}"""`
-                    : `"""${translationLines[0]}`;
-
-                const firstLineDecoration: vscode.DecorationOptions = {
-                    range: new vscode.Range(startLine, 0, startLine, 0),
-                    renderOptions: {
-                        before: {
-                            contentText: ' '.repeat(startCol) + firstLineContent,
-                            color: new vscode.ThemeColor('editorCodeLens.foreground'),
-                            fontStyle: 'italic'
-                        }
-                    }
-                };
-                groupDecorations.push(firstLineDecoration);
-
-                // Middle lines (if multi-line translation)
-                if (translationLines.length > 1) {
-                    for (let i = 1; i < translationLines.length; i++) {
-                        const currentLine = Math.min(startLine + i, endLine);
-                        const lineDecoration: vscode.DecorationOptions = {
-                            range: new vscode.Range(currentLine, 0, currentLine, 0),
-                            renderOptions: {
-                                before: {
-                                    contentText: ' '.repeat(startCol + 4) + translationLines[i],
-                                    color: new vscode.ThemeColor('editorCodeLens.foreground'),
-                                    fontStyle: 'italic'
-                                }
-                            }
-                        };
-                        groupDecorations.push(lineDecoration);
-                    }
-
-                    // Closing quotes on separate line
-                    const closeLine = Math.min(startLine + translationLines.length, endLine);
-                    const closeDecoration: vscode.DecorationOptions = {
-                        range: new vscode.Range(closeLine, 0, closeLine, 0),
+                // Show formatted translation lines
+                for (let i = 0; i < formattedLines.length; i++) {
+                    const displayLine = Math.min(startLine + i, endLine);
+                    const lineDecoration: vscode.DecorationOptions = {
+                        range: new vscode.Range(displayLine, 0, displayLine, 0),
                         renderOptions: {
                             before: {
-                                contentText: ' '.repeat(startCol) + '"""',
+                                contentText: formattedLines[i],
                                 color: new vscode.ThemeColor('editorCodeLens.foreground'),
                                 fontStyle: 'italic'
                             }
                         }
                     };
-                    groupDecorations.push(closeDecoration);
+                    groupDecorations.push(lineDecoration);
                 }
 
                 // Add this group to docstring groups
