@@ -17,7 +17,10 @@ PythonコードのdocstringやコメントをClaude APIで日本語に翻訳す�
   - ファイル保存時も自動再翻訳（キャッシュを活用）
   - **並列翻訳**: 最大5個のリクエストを同時実行（rate limit対策）
 - **LSP駆動の検出**: VSCodeのLanguage Server Protocol (Pylance)を使用した正確なdocstring検出
-- **翻訳対象**: docstring（`"""`と`'''`）とインラインコメント（`#`）
+- **翻訳対象**:
+  - モジュールdocstring（ファイル先頭のdocstring）
+  - クラス・関数・メソッドのdocstring（`"""`と`'''`）
+  - インラインコメント（`#`）
 - **永続化キャッシュ**: ディスクに保存される永続的なキャッシュでAPI呼び出しを最小化
   - 拡張機能を再起動しても翻訳結果が保持される
   - VSCodeのglobalStateに保存

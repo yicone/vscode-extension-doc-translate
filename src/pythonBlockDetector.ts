@@ -230,4 +230,41 @@ export class PythonBlockDetector {
 
         return -1;
     }
+
+    /**
+     * Extract module-level docstring (top-level docstring at the beginning of file)
+     */
+    public extractModuleDocstring(document: vscode.TextDocument): Omit<TextBlock, 'type'> | null {
+        // Look for docstring at the beginning of the file
+        // Skip initial comments and blank lines
+        for (let lineNum = 0; lineNum < Math.min(50, document.lineCount); lineNum++) {
+            const line = document.lineAt(lineNum);
+            const trimmedText = line.text.trim();
+
+            // Skip blank lines and comments
+            if (trimmedText === '' || trimmedText.startsWith('#')) {
+                continue;
+            }
+
+            // Check if this line starts with triple quotes (module docstring)
+            if (trimmedText.startsWith('"""') || trimmedText.startsWith("'''")) {
+                const docstring = this.extractDocstringFromLine(document, lineNum);
+                if (docstring) {
+                    logger.debug(`Found module docstring at line ${lineNum}`);
+                    return docstring;
+                }
+            }
+
+            // If we encounter import or other code, stop searching
+            if (trimmedText.startsWith('import ') ||
+                trimmedText.startsWith('from ') ||
+                trimmedText.startsWith('class ') ||
+                trimmedText.startsWith('def ') ||
+                trimmedText.startsWith('@')) {
+                break;
+            }
+        }
+
+        return null;
+    }
 }

@@ -160,7 +160,14 @@ export class PreTranslationService {
     private async extractAllBlocks(document: vscode.TextDocument): Promise<Array<{ text: string; range: vscode.Range; type: 'docstring' | 'comment' }>> {
         const blocks: Array<{ text: string; range: vscode.Range; type: 'docstring' | 'comment' }> = [];
 
-        // 1. Extract docstrings via LSP
+        // 1. Extract module-level docstring (file top-level)
+        const moduleDocstring = this.detector.extractModuleDocstring(document);
+        if (moduleDocstring && moduleDocstring.text.trim()) {
+            blocks.push({ text: moduleDocstring.text, range: moduleDocstring.range, type: 'docstring' });
+            logger.debug(`Extracted module docstring: ${moduleDocstring.text.substring(0, 30)}...`);
+        }
+
+        // 2. Extract docstrings via LSP
         try {
             const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
                 'vscode.executeDocumentSymbolProvider',
@@ -174,7 +181,7 @@ export class PreTranslationService {
             logger.error('Failed to get symbols from LSP', error);
         }
 
-        // 2. Extract inline comments
+        // 3. Extract inline comments
         this.extractInlineComments(document, blocks);
 
         // Deduplicate blocks by text
