@@ -2,13 +2,17 @@ import * as vscode from 'vscode';
 import { TranslationCache } from './translationCache';
 import { logger } from './logger';
 
+interface DocstringDecorationGroup {
+    blockRange: vscode.Range;  // Original docstring block range
+    decorations: vscode.DecorationOptions[];  // All decorations for this docstring
+}
+
 export class InlineTranslationProvider {
     private commentDecorationType: vscode.TextEditorDecorationType;
     private docstringDecorationType: vscode.TextEditorDecorationType;
     private cache: TranslationCache;
     private commentDecorations = new Map<string, vscode.DecorationOptions[]>();
-    private docstringDecorations = new Map<string, vscode.DecorationOptions[]>();
-    private allDocstringDecorations = new Map<string, vscode.DecorationOptions[]>();
+    private docstringDecorationGroups = new Map<string, DocstringDecorationGroup[]>();
 
     constructor(cache: TranslationCache) {
         this.cache = cache;
@@ -41,7 +45,7 @@ export class InlineTranslationProvider {
     ): Promise<void> {
         const fileKey = document.uri.toString();
         const commentDecorations: vscode.DecorationOptions[] = [];
-        const docstringDecorations: vscode.DecorationOptions[] = [];
+        const docstringGroups: DocstringDecorationGroup[] = [];
 
         logger.debug(`Updating inline translations for ${blocks.length} blocks`);
 
@@ -71,6 +75,9 @@ export class InlineTranslationProvider {
                 const endLine = block.range.end.line;
                 const startCol = block.range.start.character;
 
+                // Create a group for this docstring
+                const groupDecorations: vscode.DecorationOptions[] = [];
+
                 // Process each line of the original docstring
                 for (let lineNum = startLine; lineNum <= endLine; lineNum++) {
                     const line = document.lineAt(lineNum);
@@ -80,7 +87,7 @@ export class InlineTranslationProvider {
                     const hideLineDecoration: vscode.DecorationOptions = {
                         range: lineRange
                     };
-                    docstringDecorations.push(hideLineDecoration);
+                    groupDecorations.push(hideLineDecoration);
                 }
 
                 // Show translation with proper formatting
@@ -99,7 +106,7 @@ export class InlineTranslationProvider {
                         }
                     }
                 };
-                docstringDecorations.push(firstLineDecoration);
+                groupDecorations.push(firstLineDecoration);
 
                 // Middle lines (if multi-line translation)
                 if (translationLines.length > 1) {
@@ -115,7 +122,7 @@ export class InlineTranslationProvider {
                                 }
                             }
                         };
-                        docstringDecorations.push(lineDecoration);
+                        groupDecorations.push(lineDecoration);
                     }
 
                     // Closing quotes on separate line
@@ -130,19 +137,25 @@ export class InlineTranslationProvider {
                             }
                         }
                     };
-                    docstringDecorations.push(closeDecoration);
+                    groupDecorations.push(closeDecoration);
                 }
+
+                // Add this group to docstring groups
+                docstringGroups.push({
+                    blockRange: block.range,
+                    decorations: groupDecorations
+                });
             }
         }
 
         // Store decorations for this file
         this.commentDecorations.set(fileKey, commentDecorations);
-        this.allDocstringDecorations.set(fileKey, docstringDecorations);
+        this.docstringDecorationGroups.set(fileKey, docstringGroups);
 
         // Apply decorations to visible editors (with selection filtering)
         this.updateDecorationsForEditor(document);
 
-        logger.info(`Applied ${commentDecorations.length} comment translations and ${docstringDecorations.length} docstring translations`);
+        logger.info(`Applied ${commentDecorations.length} comment translations and ${docstringGroups.length} docstring groups`);
     }
 
     /**
@@ -164,11 +177,11 @@ export class InlineTranslationProvider {
     private applyDecorationsToEditor(editor: vscode.TextEditor): void {
         const fileKey = editor.document.uri.toString();
         const commentDecorations = this.commentDecorations.get(fileKey) || [];
-        const allDocstringDecorations = this.allDocstringDecorations.get(fileKey) || [];
+        const docstringGroups = this.docstringDecorationGroups.get(fileKey) || [];
 
-        // Filter out docstring decorations that overlap with current selections
-        const filteredDocstringDecorations = this.filterDecorationsBySelection(
-            allDocstringDecorations,
+        // Filter out docstring groups where cursor/selection overlaps with block range
+        const filteredDocstringDecorations = this.filterDocstringGroupsBySelection(
+            docstringGroups,
             editor.selections
         );
 
@@ -177,28 +190,40 @@ export class InlineTranslationProvider {
     }
 
     /**
-     * Filter decorations by removing those that overlap with any selection or cursor position
+     * Filter docstring groups by checking if cursor/selection overlaps with block range
+     * If cursor is anywhere in a docstring block, exclude all decorations for that block
      */
-    private filterDecorationsBySelection(
-        decorations: vscode.DecorationOptions[],
+    private filterDocstringGroupsBySelection(
+        groups: DocstringDecorationGroup[],
         selections: readonly vscode.Selection[]
     ): vscode.DecorationOptions[] {
-        return decorations.filter(decoration => {
-            // Check if this decoration overlaps with any selection or cursor
+        const result: vscode.DecorationOptions[] = [];
+
+        for (const group of groups) {
+            let shouldInclude = true;
+
+            // Check if any selection/cursor overlaps with this docstring block
             for (const selection of selections) {
                 // Check for selection range overlap
-                if (decoration.range.intersection(selection)) {
-                    return false;
+                if (group.blockRange.intersection(selection)) {
+                    shouldInclude = false;
+                    break;
                 }
 
-                // Check if cursor is inside this decoration (even without selection)
-                if (selection.isEmpty && decoration.range.contains(selection.active)) {
-                    return false;
+                // Check if cursor is inside this docstring block (even without selection)
+                if (selection.isEmpty && group.blockRange.contains(selection.active)) {
+                    shouldInclude = false;
+                    break;
                 }
             }
-            // No overlap, include this decoration
-            return true;
-        });
+
+            // If no overlap, include all decorations from this group
+            if (shouldInclude) {
+                result.push(...group.decorations);
+            }
+        }
+
+        return result;
     }
 
     /**
@@ -207,7 +232,7 @@ export class InlineTranslationProvider {
     clearFileDecorations(uri: vscode.Uri): void {
         const fileKey = uri.toString();
         this.commentDecorations.delete(fileKey);
-        this.allDocstringDecorations.delete(fileKey);
+        this.docstringDecorationGroups.delete(fileKey);
 
         // Clear decorations from visible editors
         for (const editor of vscode.window.visibleTextEditors) {
@@ -225,7 +250,7 @@ export class InlineTranslationProvider {
      */
     clearAllDecorations(): void {
         this.commentDecorations.clear();
-        this.allDocstringDecorations.clear();
+        this.docstringDecorationGroups.clear();
 
         // Clear from all visible editors
         for (const editor of vscode.window.visibleTextEditors) {
