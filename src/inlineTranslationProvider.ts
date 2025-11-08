@@ -62,18 +62,58 @@ export class InlineTranslationProvider {
                 };
                 commentDecorations.push(decoration);
             } else {
-                // Docstring: hide original and show translation overlay
+                // Docstring: hide original and show translation overlay (multi-line)
+                // First, hide the entire docstring range
                 const hideDecoration: vscode.DecorationOptions = {
-                    range: block.range,
+                    range: block.range
+                };
+                docstringDecorations.push(hideDecoration);
+
+                // Then, add translation lines
+                const translationLines = translation.split('\n');
+                const startLine = block.range.start.line;
+                const startCol = block.range.start.character;
+
+                // Add opening quotes with first line
+                const firstLineDecoration: vscode.DecorationOptions = {
+                    range: new vscode.Range(startLine, startCol, startLine, startCol),
                     renderOptions: {
                         before: {
-                            contentText: `"""${translation}"""`,
+                            contentText: `"""${translationLines[0]}`,
                             color: new vscode.ThemeColor('editorCodeLens.foreground'),
                             fontStyle: 'italic'
                         }
                     }
                 };
-                docstringDecorations.push(hideDecoration);
+                docstringDecorations.push(firstLineDecoration);
+
+                // Add middle lines
+                for (let i = 1; i < translationLines.length; i++) {
+                    const lineDecoration: vscode.DecorationOptions = {
+                        range: new vscode.Range(startLine + i, 0, startLine + i, 0),
+                        renderOptions: {
+                            before: {
+                                contentText: ' '.repeat(startCol) + translationLines[i],
+                                color: new vscode.ThemeColor('editorCodeLens.foreground'),
+                                fontStyle: 'italic'
+                            }
+                        }
+                    };
+                    docstringDecorations.push(lineDecoration);
+                }
+
+                // Add closing quotes on the last line
+                const lastLineDecoration: vscode.DecorationOptions = {
+                    range: new vscode.Range(startLine + translationLines.length, 0, startLine + translationLines.length, 0),
+                    renderOptions: {
+                        before: {
+                            contentText: ' '.repeat(startCol) + '"""',
+                            color: new vscode.ThemeColor('editorCodeLens.foreground'),
+                            fontStyle: 'italic'
+                        }
+                    }
+                };
+                docstringDecorations.push(lastLineDecoration);
             }
         }
 
