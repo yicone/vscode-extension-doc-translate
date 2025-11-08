@@ -31,10 +31,12 @@ export class PreTranslationService {
             return;
         }
 
-        // Skip if already translated
         const fileKey = document.uri.toString();
+
+        // If already translated, restore decorations from cache
         if (this.translatedFiles.has(fileKey)) {
-            logger.info(`File already pre-translated: ${document.fileName}`);
+            logger.debug(`File already pre-translated, restoring decorations: ${document.fileName}`);
+            await this.restoreTranslationsFromCache(document);
             return;
         }
 
@@ -182,6 +184,34 @@ export class PreTranslationService {
 
         // Use the detector to extract all blocks
         return await detector.extractAllBlocks(document);
+    }
+
+    /**
+     * Restore translations from cache for already translated file
+     */
+    private async restoreTranslationsFromCache(document: vscode.TextDocument): Promise<void> {
+        try {
+            // Extract all blocks
+            const blocks = await this.extractAllBlocks(document);
+
+            if (blocks.length === 0) {
+                logger.debug('No blocks to restore');
+                return;
+            }
+
+            // Filter blocks that have cached translations
+            const cachedBlocks = blocks.filter(block => this.cache.get(block.text));
+
+            if (cachedBlocks.length > 0) {
+                logger.debug(`Restoring ${cachedBlocks.length} cached translations`);
+                // Update inline translations with cached data
+                await this.inlineProvider.updateInlineTranslations(document, blocks);
+            } else {
+                logger.debug('No cached translations available for this file');
+            }
+        } catch (error) {
+            logger.error('Failed to restore translations from cache', error);
+        }
     }
 
     /**
