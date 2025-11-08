@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { logger } from './logger';
 import { ITranslationProvider } from './translationProvider';
+import { withRetry, DEFAULT_RETRY_CONFIG } from './retryHelper';
 
 // OpenAI SDK types (will be installed later)
 interface OpenAIClient {
@@ -115,6 +116,15 @@ ${text}`;
         const model = this.getModel();
         const timeout = this.getTimeout();
 
+        // Get retry configuration from settings
+        const config = vscode.workspace.getConfiguration('docTranslate');
+        const retryConfig = {
+            maxRetries: config.get<number>('maxRetries') || DEFAULT_RETRY_CONFIG.maxRetries,
+            initialDelayMs: config.get<number>('retryInitialDelay') || DEFAULT_RETRY_CONFIG.initialDelayMs,
+            maxDelayMs: DEFAULT_RETRY_CONFIG.maxDelayMs,
+            backoffMultiplier: DEFAULT_RETRY_CONFIG.backoffMultiplier
+        };
+
         logger.debug(`Using model: ${model}, timeout: ${timeout}ms`);
         logger.info('='.repeat(60));
         logger.info('OPENAI REQUEST PROMPT:');
@@ -123,52 +133,61 @@ ${text}`;
         logger.info('='.repeat(60));
 
         try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), timeout);
+            // Use retry logic for rate limit handling
+            const translation = await withRetry(
+                async () => {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-            logger.info('Sending request to OpenAI API...');
-            const startTime = Date.now();
+                    logger.info('Sending request to OpenAI API...');
+                    const startTime = Date.now();
 
-            const response = await this.client.chat.completions.create(
-                {
-                    model,
-                    max_tokens: 1024,
-                    messages: [
+                    const response = await this.client!.chat.completions.create(
                         {
-                            role: 'system',
-                            content: 'You are a translation assistant specialized in software engineering context.'
+                            model,
+                            max_tokens: 1024,
+                            messages: [
+                                {
+                                    role: 'system',
+                                    content: 'You are a translation assistant specialized in software engineering context.'
+                                },
+                                {
+                                    role: 'user',
+                                    content: prompt,
+                                },
+                            ],
                         },
                         {
-                            role: 'user',
-                            content: prompt,
-                        },
-                    ],
+                            signal: controller.signal,
+                        }
+                    );
+
+                    clearTimeout(timeoutId);
+                    const duration = Date.now() - startTime;
+                    logger.info(`OpenAI API response received (${duration}ms)`);
+
+                    if (!response.choices || response.choices.length === 0) {
+                        throw new Error('Empty response from OpenAI API');
+                    }
+
+                    const content = response.choices[0].message.content;
+                    if (!content) {
+                        throw new Error('No content in OpenAI API response');
+                    }
+
+                    const translatedText = content.trim();
+                    logger.info('Translation successful');
+                    logger.info('='.repeat(60));
+                    logger.info('OPENAI RESPONSE:');
+                    logger.info('-'.repeat(60));
+                    logger.info(translatedText);
+                    logger.info('='.repeat(60));
+
+                    return translatedText;
                 },
-                {
-                    signal: controller.signal,
-                }
+                retryConfig,
+                'OpenAI translation'
             );
-
-            clearTimeout(timeoutId);
-            const duration = Date.now() - startTime;
-            logger.info(`OpenAI API response received (${duration}ms)`);
-
-            if (!response.choices || response.choices.length === 0) {
-                throw new Error('Empty response from OpenAI API');
-            }
-
-            const content = response.choices[0].message.content;
-            if (!content) {
-                throw new Error('No content in OpenAI API response');
-            }
-
-            const translation = content.trim();
-            logger.info('Translation successful');
-            logger.info('='.repeat(60));
-            logger.info('OPENAI RESPONSE:');
-            logger.info('-'.repeat(60));
-            logger.info(translation);
-            logger.info('='.repeat(60));
 
             return translation;
         } catch (error: any) {

@@ -92,6 +92,16 @@
           "type": "number",
           "default": 30000,
           "description": "APIリクエストのタイムアウト（ミリ秒）"
+        },
+        "docTranslate.maxRetries": {
+          "type": "number",
+          "default": 3,
+          "description": "Rate limit発生時の最大リトライ回数"
+        },
+        "docTranslate.retryInitialDelay": {
+          "type": "number",
+          "default": 1000,
+          "description": "リトライの初期待機時間（ミリ秒）"
         }
       }
     }

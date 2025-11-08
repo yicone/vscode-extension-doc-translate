@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { logger } from './logger';
 import { ITranslationProvider } from './translationProvider';
+import { withRetry, DEFAULT_RETRY_CONFIG } from './retryHelper';
 
 // Google Generative AI SDK types (will be installed later)
 interface GenerativeModel {
@@ -117,6 +118,15 @@ ${text}`;
         const prompt = this.buildPrompt(text, sourceLang, targetLang);
         const timeout = this.getTimeout();
 
+        // Get retry configuration from settings
+        const config = vscode.workspace.getConfiguration('docTranslate');
+        const retryConfig = {
+            maxRetries: config.get<number>('maxRetries') || DEFAULT_RETRY_CONFIG.maxRetries,
+            initialDelayMs: config.get<number>('retryInitialDelay') || DEFAULT_RETRY_CONFIG.initialDelayMs,
+            maxDelayMs: DEFAULT_RETRY_CONFIG.maxDelayMs,
+            backoffMultiplier: DEFAULT_RETRY_CONFIG.backoffMultiplier
+        };
+
         logger.debug(`Using model: ${this.getModel()}, timeout: ${timeout}ms`);
         logger.info('='.repeat(60));
         logger.info('GEMINI REQUEST PROMPT:');
@@ -125,39 +135,48 @@ ${text}`;
         logger.info('='.repeat(60));
 
         try {
-            logger.info('Sending request to Gemini API...');
-            const startTime = Date.now();
+            // Use retry logic for rate limit handling
+            const translation = await withRetry(
+                async () => {
+                    logger.info('Sending request to Gemini API...');
+                    const startTime = Date.now();
 
-            // Create a timeout promise
-            const timeoutPromise = new Promise<never>((_, reject) => {
-                setTimeout(() => reject(new Error('timeout')), timeout);
-            });
+                    // Create a timeout promise
+                    const timeoutPromise = new Promise<never>((_, reject) => {
+                        setTimeout(() => reject(new Error('timeout')), timeout);
+                    });
 
-            // Race between the API call and timeout
-            const response = await Promise.race([
-                this.model.generateContent(prompt),
-                timeoutPromise
-            ]);
+                    // Race between the API call and timeout
+                    const response = await Promise.race([
+                        this.model!.generateContent(prompt),
+                        timeoutPromise
+                    ]);
 
-            const duration = Date.now() - startTime;
-            logger.info(`Gemini API response received (${duration}ms)`);
+                    const duration = Date.now() - startTime;
+                    logger.info(`Gemini API response received (${duration}ms)`);
 
-            if (!response || !response.response) {
-                throw new Error('Empty response from Gemini API');
-            }
+                    if (!response || !response.response) {
+                        throw new Error('Empty response from Gemini API');
+                    }
 
-            const text = response.response.text();
-            if (!text) {
-                throw new Error('No text in Gemini API response');
-            }
+                    const text = response.response.text();
+                    if (!text) {
+                        throw new Error('No text in Gemini API response');
+                    }
 
-            const translation = text.trim();
-            logger.info('Translation successful');
-            logger.info('='.repeat(60));
-            logger.info('GEMINI RESPONSE:');
-            logger.info('-'.repeat(60));
-            logger.info(translation);
-            logger.info('='.repeat(60));
+                    const translatedText = text.trim();
+                    logger.info('Translation successful');
+                    logger.info('='.repeat(60));
+                    logger.info('GEMINI RESPONSE:');
+                    logger.info('-'.repeat(60));
+                    logger.info(translatedText);
+                    logger.info('='.repeat(60));
+
+                    return translatedText;
+                },
+                retryConfig,
+                'Gemini translation'
+            );
 
             return translation;
         } catch (error: any) {

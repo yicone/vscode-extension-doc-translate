@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import * as vscode from 'vscode';
 import { logger } from './logger';
 import { ITranslationProvider } from './translationProvider';
+import { withRetry, DEFAULT_RETRY_CONFIG } from './retryHelper';
 
 export class AnthropicProvider implements ITranslationProvider {
     private client: Anthropic | null = null;
@@ -101,6 +102,15 @@ ${text}`;
         const model = this.getModel();
         const timeout = this.getTimeout();
 
+        // Get retry configuration from settings
+        const config = vscode.workspace.getConfiguration('docTranslate');
+        const retryConfig = {
+            maxRetries: config.get<number>('maxRetries') || DEFAULT_RETRY_CONFIG.maxRetries,
+            initialDelayMs: config.get<number>('retryInitialDelay') || DEFAULT_RETRY_CONFIG.initialDelayMs,
+            maxDelayMs: DEFAULT_RETRY_CONFIG.maxDelayMs,
+            backoffMultiplier: DEFAULT_RETRY_CONFIG.backoffMultiplier
+        };
+
         logger.debug(`Using model: ${model}, timeout: ${timeout}ms`);
         logger.info('='.repeat(60));
         logger.info('ANTHROPIC REQUEST PROMPT:');
@@ -109,48 +119,57 @@ ${text}`;
         logger.info('='.repeat(60));
 
         try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), timeout);
+            // Use retry logic for rate limit handling
+            const translation = await withRetry(
+                async () => {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-            logger.info('Sending request to Anthropic API...');
-            const startTime = Date.now();
+                    logger.info('Sending request to Anthropic API...');
+                    const startTime = Date.now();
 
-            const response = await this.client.messages.create(
-                {
-                    model,
-                    max_tokens: 1024,
-                    messages: [
+                    const response = await this.client!.messages.create(
                         {
-                            role: 'user',
-                            content: prompt,
+                            model,
+                            max_tokens: 1024,
+                            messages: [
+                                {
+                                    role: 'user',
+                                    content: prompt,
+                                },
+                            ],
                         },
-                    ],
+                        {
+                            signal: controller.signal as AbortSignal,
+                        }
+                    );
+
+                    clearTimeout(timeoutId);
+                    const duration = Date.now() - startTime;
+                    logger.info(`Anthropic API response received (${duration}ms)`);
+
+                    if (response.content.length === 0) {
+                        throw new Error('Empty response from Anthropic API');
+                    }
+
+                    const content = response.content[0];
+                    if (content.type !== 'text') {
+                        throw new Error('Unexpected response type from Anthropic API');
+                    }
+
+                    const translatedText = content.text.trim();
+                    logger.info('Translation successful');
+                    logger.info('='.repeat(60));
+                    logger.info('ANTHROPIC RESPONSE:');
+                    logger.info('-'.repeat(60));
+                    logger.info(translatedText);
+                    logger.info('='.repeat(60));
+
+                    return translatedText;
                 },
-                {
-                    signal: controller.signal as AbortSignal,
-                }
+                retryConfig,
+                'Anthropic translation'
             );
-
-            clearTimeout(timeoutId);
-            const duration = Date.now() - startTime;
-            logger.info(`Anthropic API response received (${duration}ms)`);
-
-            if (response.content.length === 0) {
-                throw new Error('Empty response from Anthropic API');
-            }
-
-            const content = response.content[0];
-            if (content.type !== 'text') {
-                throw new Error('Unexpected response type from Anthropic API');
-            }
-
-            const translation = content.text.trim();
-            logger.info('Translation successful');
-            logger.info('='.repeat(60));
-            logger.info('ANTHROPIC RESPONSE:');
-            logger.info('-'.repeat(60));
-            logger.info(translation);
-            logger.info('='.repeat(60));
 
             return translation;
         } catch (error: any) {
