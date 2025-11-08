@@ -4,13 +4,13 @@
 
 ## プロジェクト概要
 
-Claude APIを使用して英語のdocstringとコメントを日本語に翻訳するVSCode拡張機能です。Pythonファイル対象で、2種類のインライン表示方式で翻訳を提供します。
+複数のLLM（Claude, OpenAI, Gemini）を使用してdocstringとコメントを翻訳するVSCode拡張機能です。Python、JavaScript、TypeScript、Goに対応し、2種類のインライン表示方式で翻訳を提供します。
 
 **対象ユースケース:** 新人オンボーディング、コードレビュー、生産性向上
 
 ## プロジェクトステータス
 
-v0.1.0リリース済み - バックグラウンド事前翻訳＋2種類のインライン表示機能を含む完全なMVP実装
+v0.5.1リリース済み - マルチLLM・マルチ言語対応、自動言語検出、エラー通知システムを含む完全実装
 
 ## アーキテクチャ
 
@@ -19,75 +19,174 @@ v0.1.0リリース済み - バックグラウンド事前翻訳＋2種類のイ�
 - **UI**: 2種類のインライン翻訳表示
   - **コメント**: 行の右側に表示（Virtual Text方式）
   - **Docstring**: 元のテキストを隠して翻訳を上書き表示（Overlay方式）
-- **対象言語**: Python
-- **翻訳方向**: 英語 → 日本語
-- **翻訳対象**: docstring（`"""`と`'''`）とインラインコメント（`#`）
-- **翻訳エンジン**: Claude API（Claude 4.5 Haiku）
-- **検出方法**: LSP（Language Server Protocol / Pylance）でdocstringを検出、正規表現でコメントを検出
-- **翻訳タイミング**: ファイルを開いた時・保存した時に全翻訳をバックグラウンド実行
+- **対象言語**: Python、JavaScript、TypeScript、Go
+- **翻訳方向**: 自動検出（francライブラリ） → 設定した言語（10言語以上対応）
+- **翻訳対象**:
+  - Python: docstring（`"""`と`'''`）、インラインコメント（`#`）
+  - JavaScript/TypeScript: JSDoc（`/** */`）、コメント（`//`, `/* */`）
+  - Go: godoc（`/* */`）、コメント（`//`, `/* */`）
+- **翻訳エンジン**: 選択可能な3つのLLMプロバイダー
+  - Anthropic Claude（デフォルト: Claude Haiku 4.5）
+  - OpenAI（デフォルト: GPT-4o-mini）
+  - Google Gemini（デフォルト: Gemini 2.0 Flash）
+- **検出方法**: LSP（Language Server Protocol）でdocstringを検出、正規表現でコメントを検出
+  - Python: Pylance
+  - JavaScript/TypeScript: TypeScript Language Server
+  - Go: gopls
+- **翻訳タイミング**: ファイルを開いた時・保存した時・タブ切り替え時に全翻訳をバックグラウンド実行（キャッシュベース）
 
 ### 翻訳ポリシー
 
 - 技術用語・関数名・クラス名・ライブラリ名はそのまま保持
-- 直訳ではなく「自然な」日本語に寄せる
-- 日本語のみを出力（説明不要）
+- 直訳ではなく「自然な」翻訳先言語に寄せる
+- 翻訳テキストのみを出力（説明不要）
+- 元のコメントと同じ言語の場合は翻訳をスキップ
 
 ### 主要機能
 
-1. **モジュールdocstring検出**
-   - ファイル先頭の三重引用符を検出
-   - コメント・空行をスキップして最初のdocstringを取得
-   - import文やクラス/関数定義の前まで検索
+1. **自動言語検出**
+   - francライブラリで翻訳元言語を自動検出
+   - 翻訳先と同じ言語の場合は翻訳をスキップ（API呼び出しを節約）
+   - ISO 639-3形式からISO 639-1形式への変換対応
 
-2. **LSPベースのdocstring検出**
+2. **言語固有のフォーマット**
+   - Python: `"""docstring"""`形式
+   - JavaScript/TypeScript: `/** JSDoc */`形式
+   - Go: `/* godoc */`形式
+   - 各言語の慣習に合わせた自然な表示
+
+3. **LSPベースのdocstring検出**
    - `vscode.executeDocumentSymbolProvider` でシンボル情報取得
-   - シンボル定義直後からdocstringを抽出
+   - モジュール、クラス、関数、メソッドのdocstringを抽出
+   - 各言語のLSP（Pylance, TypeScript Language Server, gopls）を活用
 
-3. **正規表現ベースのコメント検出**
-   - 文字列内の`#`を除外してコメントを検出
+4. **正規表現ベースのコメント検出**
+   - 文字列内のコメント記号を除外して正確に検出
    - 各行のインラインコメントを抽出
+   - 複数行コメントにも対応
 
-4. **バックグラウンド事前翻訳**
-   - ファイルオープン・保存時に全docstringとコメントを自動翻訳
+5. **バックグラウンド事前翻訳**
+   - ファイルオープン・保存・タブ切り替え時に全docstringとコメントを自動翻訳
+   - **キャッシュベース**: キャッシュがあればAPI呼び出しなし、なければ翻訳
    - **並列翻訳**: 最大5個のリクエストを同時実行（rate limit対策）
-   - バッチ処理でAPI呼び出しを効率化
+   - **Progressive translation**: 翻訳完了したブロックから順次表示
    - ステータスバーに進捗表示
    - キャッシュに保存
 
-5. **2種類のインライン翻訳表示**
+6. **2種類のインライン翻訳表示**
    - **コメント**: `TextEditorDecorationType` の `after` プロパティで行の右側に表示
    - **Docstring**: `opacity: 0` で元のテキストを隠し、`before` で翻訳を上書き表示
    - **カーソル・選択時の原文表示**: テキスト選択イベントを監視し、カーソル位置または選択範囲と重なるdocstring decorationを自動的に除外
    - 半透明の斜体でグレーアウト表示
    - 常時表示、ホバー不要
    - ファイルは変更されない（見た目のみ）
+   - 編集中も翻訳表示を保持
 
-6. **永続化翻訳キャッシュ**
+7. **永続化翻訳キャッシュ**
    - メモリ内ハッシュマップ（SHA-256）でキャッシュ
    - VSCodeの`globalState`に自動保存（永続化）
    - 拡張機能を再起動しても翻訳結果が保持される
    - `set()`時に自動的にディスクに保存
    - 起動時に自動的にロード
-   - ファイル編集時にキャッシュ無効化
    - 保存時は変更されていない部分はキャッシュを活用
+
+8. **エラー通知システム**
+   - **Critical Error**: ダイアログで表示（APIキー未設定など）
+   - **Error**: ステータスバーで表示（タイムアウト、翻訳失敗など）
+   - **Warning**: ステータスバーで表示
+   - スパム防止機能（同じエラーは60秒に1回のみ）
+   - ログ表示へのクイックアクセス
 
 ## ファイル構成
 
-- `src/extension.ts` - 拡張機能のエントリーポイント、イベントハンドラー登録
-- `src/inlineTranslationProvider.ts` - インライン翻訳表示プロバイダー（2種類のdecoration実装）
-- `src/preTranslationService.ts` - バックグラウンド事前翻訳サービス
-- `src/claudeClient.ts` - Claude API クライアント
-- `src/pythonBlockDetector.ts` - LSPベースのdocstring検出＋正規表現ベースのコメント検出
-- `src/translationCache.ts` - 翻訳キャッシュ（SHA-256ハッシュベース）
-- `src/logger.ts` - ログ出力
+拡張機能は以下のディレクトリ構造で整理されています：
+
+### `src/`（エントリーポイント）
+- `extension.ts` - 拡張機能のエントリーポイント、イベントハンドラー登録
+
+### `src/providers/`（翻訳プロバイダー）
+- `base/`
+  - `translationProvider.ts` - ITranslationProviderインターフェース定義
+  - `baseProvider.ts` - 共通ロジック（プロンプト構築、言語検出）
+- `anthropicProvider.ts` - Anthropic Claude API クライアント
+- `openaiProvider.ts` - OpenAI API クライアント
+- `geminiProvider.ts` - Google Gemini API クライアント
+- `translationProviderFactory.ts` - プロバイダー選択のファクトリー
+
+### `src/detectors/`（ブロック検出）
+- `base/`
+  - `blockDetector.ts` - IBlockDetectorインターフェース定義
+  - `baseDetector.ts` - 共通ロジック（LSPクエリ、シンボル検索、重複排除）
+- `pythonBlockDetector.ts` - Python用ブロック検出（Pylance連携）
+- `javascriptBlockDetector.ts` - JavaScript/TypeScript用ブロック検出
+- `goBlockDetector.ts` - Go用ブロック検出
+- `blockDetectorFactory.ts` - 検出器選択のファクトリー
+
+### `src/services/`（コアサービス）
+- `preTranslationService.ts` - バックグラウンド事前翻訳サービス
+- `inlineTranslationProvider.ts` - インライン翻訳表示プロバイダー（2種類のdecoration実装）
+- `translationCache.ts` - 翻訳キャッシュ（SHA-256ハッシュベース）
+
+### `src/utils/`（ユーティリティ）
+- `logger.ts` - ログ出力・エラー通知システム
+- `config.ts` - 設定管理（ConfigManager）
+- `constants.ts` - 定数定義（言語名マッピング、デフォルト設定）
+- `retryHelper.ts` - リトライロジック（指数バックオフ）
+- `languageDetector.ts` - 言語検出（francライブラリ統合）
+- `commentFormatter.ts` - 言語固有のコメントフォーマット
+
+### `src/test/`（テストコード）
+- 87個のユニットテスト（baseDetector, languageDetector, commentFormatter, translationCache, config）
+- `assets/` - テスト用サンプルファイル（Python, TypeScript, JavaScript, Go）
+
+### `docs/`（ドキュメント）
+- `ARCHITECTURE.md` - システムアーキテクチャの詳細
+- `CONTRIBUTING.md` - 開発者ガイド
+
+## アーキテクチャ設計原則
+
+### 1. Factory Pattern
+- `TranslationProviderFactory`: LLMプロバイダーの選択・キャッシング
+- `BlockDetectorFactory`: 言語ごとの検出器の選択・サポート言語チェック
+
+### 2. Template Method Pattern
+- `BaseProvider`: 共通の翻訳ロジック（プロンプト構築、言語検出チェック）
+- `BaseBlockDetector`: 共通の検出ロジック（LSPクエリ、シンボル検索、重複排除）
+
+### 3. Dependency Injection
+- `ConfigManager`: 設定の一元管理、散在していた`vscode.workspace.getConfiguration()`呼び出しを集約
+
+### 4. Cache-First Strategy
+- 常にキャッシュをチェック、存在すれば即座に返却
+- API呼び出しは最小限に抑える
 
 ## 設定
 
+### 基本設定
+- `docTranslate.provider` - 使用するLLMプロバイダー（`anthropic`、`openai`、`gemini`、デフォルト: `anthropic`）
+- `docTranslate.targetLang` - 翻訳先の言語コード（デフォルト: `ja`）
+  - 翻訳元言語は自動検出されます
+  - 対応言語: `en`, `ja`, `zh`, `ko`, `fr`, `de`, `es`, `it`, `pt`, `ru` など
+- `docTranslate.supportedLanguages` - 翻訳対象のプログラミング言語（デフォルト: `["python", "javascript", "typescript", "go"]`）
+- `docTranslate.timeout` - APIリクエストのタイムアウト（ミリ秒、デフォルト: `30000`）
+- `docTranslate.maxRetries` - 最大リトライ回数（デフォルト: `3`）
+- `docTranslate.retryInitialDelay` - リトライ初期遅延（ミリ秒、デフォルト: `1000`）
+
+### Anthropic Claude設定
 - `docTranslate.anthropicApiKey` - Anthropic APIキー（環境変数 `ANTHROPIC_API_KEY` が優先）
-- `docTranslate.model` - 使用モデル（デフォルト: `claude-haiku-4-5-20251001`）
-- `docTranslate.timeout` - タイムアウト（デフォルト: 30000ms）
+- `docTranslate.model` - 使用するClaudeモデル（デフォルト: `claude-haiku-4-5-20251001`）
+
+### OpenAI設定
+- `docTranslate.openaiApiKey` - OpenAI APIキー（環境変数 `OPENAI_API_KEY` が優先）
+- `docTranslate.openaiModel` - 使用するOpenAIモデル（デフォルト: `gpt-4o-mini`）
+
+### Google Gemini設定
+- `docTranslate.geminiApiKey` - Gemini APIキー（環境変数 `GEMINI_API_KEY` が優先）
+- `docTranslate.geminiModel` - 使用するGeminiモデル（デフォルト: `gemini-2.0-flash-exp`）
 
 ## 開発
+
+### セットアップ
 
 ```bash
 # 依存関係インストール
@@ -99,6 +198,52 @@ npm run compile
 # 自動コンパイル（開発時）
 npm run watch
 
+# テスト実行
+npm test
+
 # 拡張機能をデバッグ
 F5キーを押す
 ```
+
+### テスト
+
+87個のユニットテストで主要コンポーネントをカバー：
+- `baseDetector.test.ts` - BaseBlockDetectorの共通メソッド（10テスト）
+- `languageDetector.test.ts` - 言語検出（17テスト、10言語以上）
+- `commentFormatter.test.ts` - 言語固有フォーマット（21テスト、Python/JS/TS/Go）
+- `translationCache.test.ts` - キャッシュCRUD・永続化（19テスト）
+- `config.test.ts` - 設定管理（13テスト）
+
+### 新機能追加ガイド
+
+詳細は `docs/CONTRIBUTING.md` を参照してください。
+
+#### 新しいプログラミング言語のサポート追加
+
+1. `src/detectors/` に新しい検出器を作成（例: `rustBlockDetector.ts`）
+2. `BaseBlockDetector` を継承して言語固有のロジックを実装
+3. `src/detectors/blockDetectorFactory.ts` に言語を追加
+4. `src/utils/commentFormatter.ts` に言語固有のフォーマットを追加
+5. テストを追加
+
+#### 新しいLLMプロバイダーのサポート追加
+
+1. `src/providers/` に新しいプロバイダーを作成（例: `claudeProvider.ts`）
+2. `BaseProvider` を継承して API呼び出しロジックを実装
+3. `src/providers/translationProviderFactory.ts` にプロバイダーを追加
+4. `package.json` に設定項目を追加
+5. テストを追加
+
+### リファクタリング履歴
+
+v0.5.0でメジャーリファクタリングを実施：
+- ディレクトリ構造の整理（providers/, detectors/, services/, utils/）
+- BaseProvider/BaseDetectorによる共通化
+- ConfigManagerによる設定の一元管理
+- 重複コードの削減（-245行）
+- 包括的なテスト追加（87テスト）
+
+### ドキュメント
+
+- [アーキテクチャ](docs/ARCHITECTURE.md) - システムアーキテクチャの詳細
+- [開発ガイド](docs/CONTRIBUTING.md) - 開発者向けガイド（作成予定）

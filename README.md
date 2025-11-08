@@ -6,7 +6,8 @@
 
 - **複数のLLMプロバイダー対応**: Anthropic Claude、OpenAI、Google Geminiから選択可能
 - **複数のプログラミング言語対応**: Python、JavaScript、TypeScript、Goに対応
-- **翻訳言語の自由な設定**: 翻訳元と翻訳先の言語を自由に設定可能
+- **自動言語検出**: コメントの言語を自動検出し、同じ言語なら翻訳をスキップ
+- **多言語翻訳対応**: 10言語以上の翻訳先言語をサポート
 - **インライン翻訳表示**: ファイルを開くと、docstringとコメントの翻訳がコード内に常時表示
   - **コメント**（`#`）: 各行の右側に翻訳を表示（例: `# comment → コメント`）
   - **Docstring**（`"""`/`'''`）: 元のテキストを隠して翻訳を上書き表示
@@ -29,7 +30,16 @@
   - VSCodeのglobalStateに保存
 - **進捗インジケーター**: 翻訳中はステータスバーに進捗を表示
 - **詳細なログ**: LSPクエリ、APIリクエスト/レスポンス、デバッグ情報を記録
+- **エラー通知**: 非侵入的なエラー通知システム
+  - **Critical Error**: ダイアログで表示（APIキー未設定など）
+  - **Error**: ステータスバーで表示（タイムアウト、翻訳失敗など）
+  - スパム防止機能（同じエラーは60秒に1回のみ）
 - **設定可能**: 環境変数とVSCode設定の両方に対応
+
+## ドキュメント
+
+- [アーキテクチャ](docs/ARCHITECTURE.md) - システムアーキテクチャの詳細
+- [開発ガイド](docs/CONTRIBUTING.md) - 開発者向けガイド
 
 ## 必要要件
 
@@ -48,10 +58,13 @@
 
 ### 基本設定
 * `docTranslate.provider`: 使用するLLMプロバイダー（`anthropic`、`openai`、`gemini`、デフォルト: `anthropic`）
-* `docTranslate.sourceLang`: 翻訳元の言語コード（デフォルト: `en`）
 * `docTranslate.targetLang`: 翻訳先の言語コード（デフォルト: `ja`）
+  - 翻訳元言語は自動検出されます
+  - 対応言語: `en`, `ja`, `zh`, `ko`, `fr`, `de`, `es`, `it`, `pt`, `ru` など
 * `docTranslate.supportedLanguages`: 翻訳対象のプログラミング言語（デフォルト: `["python", "javascript", "typescript", "go"]`）
 * `docTranslate.timeout`: APIリクエストのタイムアウト（ミリ秒、デフォルト: `30000`）
+* `docTranslate.maxRetries`: 最大リトライ回数（デフォルト: `3`）
+* `docTranslate.retryInitialDelay`: リトライ初期遅延（ミリ秒、デフォルト: `1000`）
 
 ### Anthropic Claude設定
 * `docTranslate.anthropicApiKey`: Anthropic APIキー（環境変数 `ANTHROPIC_API_KEY` が優先されます）
@@ -74,10 +87,11 @@
      - **OpenAI**: 環境変数 `OPENAI_API_KEY` または設定 `docTranslate.openaiApiKey`
      - **Gemini**: 環境変数 `GEMINI_API_KEY` または設定 `docTranslate.geminiApiKey`
 
-2. 翻訳言語を設定（オプション）:
-   - `docTranslate.sourceLang`: 翻訳元の言語（デフォルト: `en`）
+2. 翻訳先言語を設定（オプション）:
    - `docTranslate.targetLang`: 翻訳先の言語（デフォルト: `ja`）
-   - 対応言語: `en`, `ja`, `zh`, `ko`, `fr`, `de`, `es`, `it`, `pt`, `ru`
+   - 翻訳元言語は自動検出されます（francライブラリ使用）
+   - 同じ言語の場合は自動的にスキップされます
+   - 対応言語: `en`, `ja`, `zh`, `ko`, `fr`, `de`, `es`, `it`, `pt`, `ru` など
 
 3. サポートされている言語のファイルを開く（Python、JavaScript、TypeScript、Go）
    - 拡張機能が自動的にバックグラウンドですべてのdocstringとコメントを翻訳開始
@@ -137,6 +151,33 @@
 現時点ではありません。
 
 ## リリースノート
+
+### 0.5.1
+
+バグ修正とパフォーマンス改善:
+- 翻訳表示の余白調整（より見やすく）
+- エラー通知システムの追加
+  - Critical error: ダイアログ表示
+  - 通常error: ステータスバー表示（自動消滅）
+  - スパム防止（60秒cooldown）
+- ファイルオープン時の翻訳表示を改善
+  - キャッシュから即座に復元
+  - タブ切り替えで確実に表示
+- 編集中も翻訳表示を保持（編集で消えない）
+- 翻訳ロジックのシンプル化（キャッシュベース）
+
+### 0.5.0
+
+メジャーアップデート - 自動言語検出 & リファクタリング:
+- **自動言語検出**: francライブラリによる翻訳元言語の自動検出
+- **言語固有フォーマット**: Python `"""`, JS/TS `/** */`, Go `/* */`
+- **progressive translation**: 翻訳完了したブロックから順次表示
+- **コードリファクタリング**:
+  - ディレクトリ構造の整理（providers/, detectors/, services/, utils/）
+  - BaseProvider/BaseDetectorによる共通化
+  - ConfigManagerによる設定の一元管理
+  - 重複コードの削減（-245行）
+- **包括的なテスト**: 87テスト追加（unit tests）
 
 ### 0.4.0
 
