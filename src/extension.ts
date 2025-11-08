@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { TranslationHoverProvider } from './translationHoverProvider';
 import { PreTranslationService } from './preTranslationService';
+import { InlineTranslationProvider } from './inlineTranslationProvider';
 import { logger } from './logger';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -13,10 +14,15 @@ export function activate(context: vscode.ExtensionContext) {
 	const hoverProvider = new TranslationHoverProvider();
 	logger.info('Hover provider created');
 
+	// Create inline translation provider
+	const inlineProvider = new InlineTranslationProvider(hoverProvider.cache);
+	logger.info('Inline translation provider created');
+
 	// Create pre-translation service
 	const preTranslationService = new PreTranslationService(
 		hoverProvider.claudeClient,
-		hoverProvider.cache
+		hoverProvider.cache,
+		inlineProvider
 	);
 	logger.info('Pre-translation service created');
 
@@ -90,6 +96,12 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 	logger.info('File save watcher registered');
 
+	// Watch for active editor changes (to refresh inline decorations)
+	const onEditorChangeDisposable = vscode.window.onDidChangeActiveTextEditor(() => {
+		inlineProvider.refreshVisibleEditors();
+	});
+	logger.info('Editor change watcher registered');
+
 	context.subscriptions.push(
 		hoverDisposable,
 		clearCacheCommand,
@@ -98,7 +110,9 @@ export function activate(context: vscode.ExtensionContext) {
 		onOpenDisposable,
 		onChangeDisposable,
 		onSaveDisposable,
-		{ dispose: () => preTranslationService.dispose() }
+		onEditorChangeDisposable,
+		{ dispose: () => preTranslationService.dispose() },
+		{ dispose: () => inlineProvider.dispose() }
 	);
 
 	logger.info('Doc Translate extension activated successfully!');

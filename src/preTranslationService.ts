@@ -2,19 +2,22 @@ import * as vscode from 'vscode';
 import { ClaudeClient } from './claudeClient';
 import { TranslationCache } from './translationCache';
 import { PythonBlockDetector } from './pythonBlockDetector';
+import { InlineTranslationProvider } from './inlineTranslationProvider';
 import { logger } from './logger';
 
 export class PreTranslationService {
     private claudeClient: ClaudeClient;
     private cache: TranslationCache;
     private detector: PythonBlockDetector;
+    private inlineProvider: InlineTranslationProvider;
     private statusBarItem: vscode.StatusBarItem;
     private isTranslating = false;
     private translatedFiles = new Set<string>();
 
-    constructor(claudeClient: ClaudeClient, cache: TranslationCache) {
+    constructor(claudeClient: ClaudeClient, cache: TranslationCache, inlineProvider: InlineTranslationProvider) {
         this.claudeClient = claudeClient;
         this.cache = cache;
+        this.inlineProvider = inlineProvider;
         this.detector = new PythonBlockDetector();
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     }
@@ -93,6 +96,9 @@ export class PreTranslationService {
 
             // Mark as translated
             this.translatedFiles.add(fileKey);
+
+            // Update inline translations
+            await this.inlineProvider.updateInlineTranslations(document, blocks);
 
             // Show completion message
             this.statusBarItem.text = `$(check) Translated ${translated} blocks`;
@@ -179,6 +185,7 @@ export class PreTranslationService {
     clearFileCache(uri: vscode.Uri): void {
         const fileKey = uri.toString();
         this.translatedFiles.delete(fileKey);
+        this.inlineProvider.clearFileDecorations(uri);
         logger.info(`Cleared pre-translation cache for: ${uri.fsPath}`);
     }
 
@@ -187,6 +194,7 @@ export class PreTranslationService {
      */
     clearAllCaches(): void {
         this.translatedFiles.clear();
+        this.inlineProvider.clearAllDecorations();
         logger.info('Cleared all pre-translation caches');
     }
 
