@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { logger } from './logger';
 import { ITranslationProvider } from './translationProvider';
 import { withRetry, DEFAULT_RETRY_CONFIG } from './retryHelper';
+import { isTranslationNeeded } from './languageDetector';
 
 // OpenAI SDK types (will be installed later)
 interface OpenAIClient {
@@ -99,6 +100,12 @@ ${text}`;
     async translate(text: string, targetLang: string): Promise<string> {
         logger.info(`OpenAI translation request received (text length: ${text.length} chars, target: ${targetLang})`);
         logger.debug('Text to translate:', { text: text.substring(0, 100) + (text.length > 100 ? '...' : '') });
+
+        // Check if translation is needed (skip if already in target language)
+        if (!await isTranslationNeeded(text, targetLang)) {
+            logger.info('Translation not needed, returning original text');
+            return text;
+        }
 
         if (!this.client) {
             // Re-initialize in case API key was added after extension activation
