@@ -25,70 +25,81 @@ Doc Translateは、コード内のdocstringとコメントを複数のLLMを使�
 
 ## アーキテクチャ図
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        VSCode IDE                            │
-├─────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ Text Editor  │  │Status Bar    │  │Output Channel│      │
-│  │              │  │              │  │              │      │
-│  │ Decorations  │◄─┤Progress Info │◄─┤Detailed Logs │      │
-│  └──────┬───────┘  └──────────────┘  └──────────────┘      │
-│         │                                                    │
-├─────────┼────────────────────────────────────────────────────┤
-│         │            Extension Host                          │
-│         ▼                                                    │
-│  ┌──────────────────────────────────────────────────┐       │
-│  │              extension.ts (Entry Point)           │       │
-│  │  • Event handlers registration                    │       │
-│  │  • Lifecycle management                           │       │
-│  └─────────┬────────────────────────────────────────┘       │
-│            │                                                 │
-│            ▼                                                 │
-│  ┌─────────────────────────────────────────────────┐        │
-│  │         PreTranslationService                    │        │
-│  │  • Orchestrates translation workflow             │        │
-│  │  • Manages active translations map               │        │
-│  │  • Progress tracking                              │        │
-│  └──┬───────────────┬──────────────┬─────────────┬──┘        │
-│     │               │              │             │           │
-│     ▼               ▼              ▼             ▼           │
-│  ┌─────┐   ┌────────────┐  ┌──────────┐  ┌──────────┐      │
-│  │Cache│   │Block       │  │Translation│  │Inline    │      │
-│  │     │   │Detector    │  │Provider   │  │Provider  │      │
-│  └─────┘   │Factory     │  │Factory    │  └──────────┘      │
-│            └────┬───────┘  └─────┬─────┘                    │
-│                 │                 │                          │
-│     ┌───────────┼─────────────────┼────────────┐            │
-│     ▼           ▼                 ▼            ▼            │
-│  ┌──────┐  ┌──────┐        ┌─────────┐  ┌─────────┐        │
-│  │Python│  │JS/TS │        │Anthropic│  │OpenAI   │        │
-│  │      │  │Go    │        │Provider │  │Gemini   │        │
-│  │Detect│  │Detect│        └────┬────┘  └────┬────┘        │
-│  └──────┘  └──┬───┘             │            │             │
-│               │                 │            │             │
-│               ▼                 ▼            ▼             │
-│        ┌────────────┐    ┌──────────────────────┐          │
-│        │Base        │    │Base Provider         │          │
-│        │Detector    │    │• Common prompt build │          │
-│        │• LSP logic │    │• Language detection  │          │
-│        │• Dedup     │    └──────────────────────┘          │
-│        └────────────┘                                       │
-│                                                             │
-├─────────────────────────────────────────────────────────────┤
-│                    External Services                         │
-│                                                             │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │Anthropic API │  │OpenAI API    │  │Gemini API    │     │
-│  └──────────────┘  └──────────────┘  └──────────────┘     │
-│                                                             │
-│  ┌──────────────────────────────────────────────────┐      │
-│  │     VSCode Language Server Protocol (LSP)        │      │
-│  │  • Pylance (Python)                              │      │
-│  │  • TypeScript Language Server                    │      │
-│  │  • gopls (Go)                                    │      │
-│  └──────────────────────────────────────────────────┘      │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph VSCode["VSCode IDE"]
+        subgraph UI["UI Layer"]
+            TextEditor["Text Editor<br/>Decorations"]
+            StatusBar["Status Bar<br/>Progress Info"]
+            OutputChannel["Output Channel<br/>Detailed Logs"]
+        end
+
+        subgraph ExtensionHost["Extension Host"]
+            Entry["extension.ts<br/>• Event handlers registration<br/>• Lifecycle management"]
+            PreTranslation["PreTranslationService<br/>• Orchestrates translation workflow<br/>• Manages active translations map<br/>• Progress tracking"]
+
+            Cache["Translation<br/>Cache"]
+            BlockFactory["Block Detector<br/>Factory"]
+            ProviderFactory["Translation Provider<br/>Factory"]
+            InlineProvider["Inline Translation<br/>Provider"]
+
+            subgraph Detectors["Block Detectors"]
+                PythonDetector["Python<br/>Detector"]
+                JSDetector["JS/TS/Go<br/>Detector"]
+                BaseDetector["Base Detector<br/>• LSP logic<br/>• Dedup"]
+            end
+
+            subgraph Providers["Translation Providers"]
+                AnthropicProvider["Anthropic<br/>Provider"]
+                OpenAIProvider["OpenAI<br/>Provider"]
+                GeminiProvider["Gemini<br/>Provider"]
+                BaseProvider["Base Provider<br/>• Common prompt build<br/>• Language detection"]
+            end
+        end
+    end
+
+    subgraph External["External Services"]
+        AnthropicAPI["Anthropic API"]
+        OpenAIAPI["OpenAI API"]
+        GeminiAPI["Gemini API"]
+
+        subgraph LSP["VSCode Language Server Protocol"]
+            Pylance["Pylance (Python)"]
+            TSLS["TypeScript Language Server"]
+            Gopls["gopls (Go)"]
+        end
+    end
+
+    Entry --> PreTranslation
+    PreTranslation --> Cache
+    PreTranslation --> BlockFactory
+    PreTranslation --> ProviderFactory
+    PreTranslation --> InlineProvider
+
+    InlineProvider --> TextEditor
+    PreTranslation --> StatusBar
+    PreTranslation -.log.-> OutputChannel
+
+    BlockFactory --> PythonDetector
+    BlockFactory --> JSDetector
+    PythonDetector --> BaseDetector
+    JSDetector --> BaseDetector
+
+    ProviderFactory --> AnthropicProvider
+    ProviderFactory --> OpenAIProvider
+    ProviderFactory --> GeminiProvider
+    AnthropicProvider --> BaseProvider
+    OpenAIProvider --> BaseProvider
+    GeminiProvider --> BaseProvider
+
+    BaseDetector -.query.-> LSP
+    AnthropicProvider -.API call.-> AnthropicAPI
+    OpenAIProvider -.API call.-> OpenAIAPI
+    GeminiProvider -.API call.-> GeminiAPI
+
+    style VSCode fill:#e1f5ff
+    style ExtensionHost fill:#fff4e1
+    style External fill:#f0f0f0
 ```
 
 ## コアコンポーネント
@@ -309,100 +320,137 @@ franc ライブラリを使用した言語検出を提供します。
 
 ### 1. ファイルオープン時
 
-```
-User opens file.py
-        ↓
-onDidOpenTextDocument event
-        ↓
-preTranslationService.preTranslateDocument()
-        ↓
-┌─────────────────────────┐
-│ Extract Blocks          │
-│ ├─ LSP query           │
-│ ├─ Module docstring    │
-│ ├─ Symbol docstrings   │
-│ └─ Inline comments     │
-└────────┬────────────────┘
-         ↓
-┌─────────────────────────┐
-│ Check Cache             │
-│ ├─ Cached: Use cache   │
-│ └─ Not cached: Translate│
-└────────┬────────────────┘
-         ↓
-┌─────────────────────────┐
-│ Translate (Parallel)    │
-│ ├─ Batch up to 5       │
-│ ├─ Language detection  │
-│ ├─ API call            │
-│ └─ Save to cache       │
-└────────┬────────────────┘
-         ↓
-┌─────────────────────────┐
-│ Update Display          │
-│ ├─ Comment decorations │
-│ └─ Docstring overlays  │
-└─────────────────────────┘
+```mermaid
+sequenceDiagram
+    actor User
+    participant VSCode
+    participant Extension as extension.ts
+    participant PreTranslation as PreTranslationService
+    participant Detector as BlockDetector
+    participant Cache as TranslationCache
+    participant Provider as TranslationProvider
+    participant Inline as InlineProvider
+
+    User->>VSCode: Open file.py
+    VSCode->>Extension: onDidOpenTextDocument event
+    Extension->>PreTranslation: preTranslateDocument()
+
+    PreTranslation->>Detector: extractAllBlocks()
+    Note over Detector: • LSP query<br/>• Module docstring<br/>• Symbol docstrings<br/>• Inline comments
+    Detector-->>PreTranslation: blocks[]
+
+    loop For each block
+        PreTranslation->>Cache: get(blockText)
+        alt Cached
+            Cache-->>PreTranslation: translation
+        else Not cached
+            PreTranslation->>Provider: translate(text, targetLang)
+            Note over Provider: • Language detection<br/>• API call<br/>• Batch up to 5 parallel
+            Provider-->>PreTranslation: translation
+            PreTranslation->>Cache: set(text, translation)
+        end
+    end
+
+    PreTranslation->>Inline: updateInlineTranslations()
+    Note over Inline: • Comment decorations<br/>• Docstring overlays
+    Inline->>VSCode: Apply decorations
+    VSCode-->>User: Show translations
 ```
 
 ### 2. タブ切り替え時
 
-```
-User switches to already-open file.py
-        ↓
-onDidChangeActiveTextEditor event
-        ↓
-preTranslateDocument()
-        ↓
-activeTranslations.has(fileKey)?
-├─ Yes: Wait for existing translation
-└─ No: Start new translation
-        ↓
-Extract blocks
-        ↓
-Check cache (all blocks cached)
-        ↓
-updateInlineTranslations()
-        ↓
-Decorations appear instantly
+```mermaid
+sequenceDiagram
+    actor User
+    participant VSCode
+    participant Extension as extension.ts
+    participant PreTranslation as PreTranslationService
+    participant Cache as TranslationCache
+    participant Inline as InlineProvider
+
+    User->>VSCode: Switch to already-open file.py
+    VSCode->>Extension: onDidChangeActiveTextEditor event
+    Extension->>PreTranslation: preTranslateDocument()
+
+    alt Translation already in progress
+        Note over PreTranslation: Wait for existing translation
+        PreTranslation-->>PreTranslation: await activeTranslations.get(fileKey)
+    else No active translation
+        PreTranslation->>PreTranslation: Extract blocks
+        PreTranslation->>Cache: get() for all blocks
+        Note over Cache: All blocks cached
+        Cache-->>PreTranslation: cached translations
+        PreTranslation->>Inline: updateInlineTranslations()
+        Inline->>VSCode: Apply decorations
+    end
+
+    VSCode-->>User: Decorations appear instantly
 ```
 
 ### 3. ファイル保存時
 
-```
-User saves file.py (with edits)
-        ↓
-onDidSaveTextDocument event
-        ↓
-preTranslateDocument()
-        ↓
-Extract blocks (latest content)
-        ↓
-Check cache
-├─ Unchanged blocks: Use cache
-└─ New/changed blocks: Translate
-        ↓
-Update display with latest translations
+```mermaid
+sequenceDiagram
+    actor User
+    participant VSCode
+    participant Extension as extension.ts
+    participant PreTranslation as PreTranslationService
+    participant Detector as BlockDetector
+    participant Cache as TranslationCache
+    participant Provider as TranslationProvider
+    participant Inline as InlineProvider
+
+    User->>VSCode: Save file.py (with edits)
+    VSCode->>Extension: onDidSaveTextDocument event
+    Extension->>PreTranslation: preTranslateDocument()
+
+    PreTranslation->>Detector: extractAllBlocks(latest content)
+    Detector-->>PreTranslation: blocks[]
+
+    loop For each block
+        PreTranslation->>Cache: get(blockText)
+        alt Unchanged block (cached)
+            Cache-->>PreTranslation: Use cached translation
+        else New/changed block
+            PreTranslation->>Provider: translate(text, targetLang)
+            Provider-->>PreTranslation: translation
+            PreTranslation->>Cache: set(text, translation)
+        end
+    end
+
+    PreTranslation->>Inline: updateInlineTranslations()
+    Inline->>VSCode: Apply decorations
+    VSCode-->>User: Show updated translations
 ```
 
 ### 4. エラー発生時
 
-```
-Translation API call fails
-        ↓
-Error caught in provider
-        ↓
-logger.notifyError("Translation failed")
-        ↓
-┌──────────────────────┐
-│ Status Bar           │
-│ $(error) Translation │
-│ failed: [reason]     │
-│                      │
-│ Click → View Logs    │
-└──────────────────────┘
-        ↓ (auto-hide after 5s)
-        ↓ (60s cooldown for same error)
+```mermaid
+sequenceDiagram
+    participant Provider as TranslationProvider
+    participant API as External API
+    participant Logger
+    participant StatusBar as VSCode Status Bar
+    participant User
+
+    Provider->>API: translate() API call
+    API-->>Provider: ❌ Error (timeout/rate limit/etc)
+
+    Provider->>Logger: notifyError("Translation failed: [reason]")
+
+    alt First error or after 60s cooldown
+        Logger->>StatusBar: Show error message
+        Note over StatusBar: $(error) Translation failed: [reason]<br/>Click to view logs
+
+        User->>StatusBar: Click
+        StatusBar->>Logger: show()
+        Logger-->>User: Open output channel with detailed logs
+
+        Note over StatusBar: Auto-hide after 5s
+        StatusBar-->>StatusBar: Hide
+    else Same error within 60s (spam prevention)
+        Note over Logger: Skip notification<br/>(cooldown active)
+    end
 ```
 
 ## ディレクトリ構造

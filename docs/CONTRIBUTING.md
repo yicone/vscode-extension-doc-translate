@@ -180,6 +180,57 @@ suite('YourClass Test Suite', () => {
 - 新しい検出器（pythonBlockDetector.ts など）
 - ユーティリティ関数（languageDetector.ts, commentFormatter.ts など）
 
+## CI/CD
+
+### 継続的インテグレーション
+
+このプロジェクトはGitHub Actionsを使用してCIを実行しています。
+
+**CIワークフロー** (`.github/workflows/ci.yml`):
+- **テスト**: Node.js 18.x と 20.x でテストを実行
+- **リント**: ESLintでコード品質をチェック
+- **ビルド**: 拡張機能パッケージ（.vsix）を作成
+- **TypeScriptチェック**: 型エラーをチェック
+
+### CI実行タイミング
+
+- `main` ブランチへのプッシュ
+- プルリクエストの作成・更新
+- 手動実行（workflow_dispatch）
+
+### ローカルでCIと同じチェックを実行
+
+プッシュ前にローカルで同じチェックを実行することをお勧めします：
+
+```bash
+# コンパイルチェック
+npm run compile
+
+# リント
+npm run lint
+
+# テスト
+npm test
+
+# TypeScript型チェック
+npx tsc --noEmit
+
+# 拡張機能パッケージング（オプション）
+npx vsce package
+```
+
+### CIステータス
+
+PRをマージする前に、すべてのCIチェックが通過していることを確認してください：
+- ✅ Test on Node.js 18.x
+- ✅ Test on Node.js 20.x
+- ✅ Lint Code
+- ✅ Build Extension Package
+
+CIステータスはREADMEのバッジで確認できます：
+
+[![CI](https://github.com/eycjur/vscode-extension-doc-translate/actions/workflows/ci.yml/badge.svg)](https://github.com/eycjur/vscode-extension-doc-translate/actions/workflows/ci.yml)
+
 ## コーディング規約
 
 ### TypeScript
