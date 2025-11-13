@@ -2,10 +2,11 @@
   "name": "doc-translate",
   "displayName": "Doc Translate",
   "description": "複数のLLM（Claude, OpenAI, Gemini）を使用してコードのdocstringとコメントを翻訳（Python, JS, TS, Go対応）",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "publisher": "m-cube",
+  "icon": "img/icon-design.png",
   "engines": {
-    "vscode": "^1.105.0"
+    "vscode": "^1.99.0"
   },
   "categories": [
     "Other"
@@ -126,7 +127,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "@types/vscode": "^1.105.0",
+    "@types/vscode": "^1.99.0",
     "@typescript-eslint/eslint-plugin": "^8.45.0",
     "@typescript-eslint/parser": "^8.45.0",
     "@vscode/test-cli": "^0.0.11",
