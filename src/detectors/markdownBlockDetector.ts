@@ -80,11 +80,11 @@ export class MarkdownBlockDetector extends BaseBlockDetector {
       }
 
       // Detect List Items (- Item, * Item, 1. Item)
-      // Note: We want to translate the content, not the bullet point
+      // Note: We want to preserve the bullet point so the translation maintains the list structure
       const listMatch = trimmedLine.match(/^(\s*[-*+]|\s*\d+\.)\s+(.+)/);
       if (listMatch) {
-        const content = listMatch[2];
-        this.addBlock(blocks, content, i, 'docstring');
+        // Pass the whole line to preserve indentation and marker
+        this.addBlock(blocks, line, i, 'docstring');
         continue;
       }
 
@@ -113,8 +113,9 @@ export class MarkdownBlockDetector extends BaseBlockDetector {
     lineIndex: number,
     type: 'docstring' | 'comment'
   ): void {
-    const cleanText = text.trim();
-    if (cleanText) {
+    // Only trim the end to preserve indentation (important for Markdown nesting)
+    const cleanText = text.trimEnd();
+    if (cleanText.trim().length > 0) {
       blocks.push({
         text: cleanText,
         range: new vscode.Range(lineIndex, 0, lineIndex, text.length),
