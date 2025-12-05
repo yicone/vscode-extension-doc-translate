@@ -103,7 +103,7 @@ export class PreTranslationService {
 
       // Filter out already cached blocks
       const blocksToTranslate = blocks.filter(
-        (block) => !this.cache.get(block.text)
+        (block) => !this.cache.get(block.text, ConfigManager.getTargetLang())
       );
       const cachedCount = blocks.length - blocksToTranslate.length;
 
