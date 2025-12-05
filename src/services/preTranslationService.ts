@@ -7,6 +7,12 @@ import { InlineTranslationProvider } from './inlineTranslationProvider';
 import { logger } from '../utils/logger';
 import { ConfigManager } from '../utils/config';
 import { TextBlock } from '../detectors/base/blockDetector';
+const pLimit = require('p-limit');
+
+interface ITranslationProvider {
+  translate(text: string, targetLang: string): Promise<string>;
+  translateBatch(texts: string[], targetLang: string): Promise<string[]>;
+}
 
 // Maximum number of concurrent translation requests
 const MAX_CONCURRENT_REQUESTS = 5;
@@ -211,42 +217,73 @@ export class PreTranslationService {
     while (index < blocksToTranslate.length) {
       // Get next batch (up to MAX_CONCURRENT_REQUESTS)
       const batch = blocksToTranslate.slice(
-        index,
-        index + MAX_CONCURRENT_REQUESTS
-      );
-      index += batch.length;
+    // Group blocks into batches
+    // Strategy: Group by count (e.g. 10) or total length (e.g. 2000 chars)
+    const BATCH_SIZE = 10;
+    const MAX_BATCH_LENGTH = 2000;
+    
+    const batches: TextBlock[][] = [];
+    let currentBatch: TextBlock[] = [];
+    let currentBatchLength = 0;
 
-      // Translate all blocks in this batch concurrently
-      const promises = batch.map(async (block) => {
+    for (const block of blocksToTranslate) {
+        // Check if adding this block would exceed limits
+        if (currentBatch.length >= BATCH_SIZE || (currentBatchLength + block.text.length) > MAX_BATCH_LENGTH) {
+            if (currentBatch.length > 0) {
+                batches.push(currentBatch);
+                currentBatch = [];
+                currentBatchLength = 0;
+            }
+        }
+        
+        currentBatch.push(block);
+        currentBatchLength += block.text.length;
+    }
+    
+    if (currentBatch.length > 0) {
+        batches.push(currentBatch);
+    }
+
+    logger.info(`Translating ${blocksToTranslate.length} blocks in ${batches.length} batches`);
+
+    // Process batches concurrently (limited by MAX_CONCURRENT_REQUESTS)
+    const limit = pLimit(MAX_CONCURRENT_REQUESTS);
+    
+    const promises = batches.map(batch => limit(async () => {
         try {
-          logger.debug(
-            `Translating block text (${
-              block.text.length
-            } chars): "${block.text.substring(0, 100)}..."`
-          );
-          const translation = await provider.translate(block.text, targetLang);
-          this.cache.set(block.text, translation);
-          completed++;
-          onProgress(completed, allBlocks.length);
-          logger.debug(`Completed ${completed}/${blocksToTranslate.length}`);
-
-          // Update inline translations progressively after each block completes
-          await this.inlineProvider.updateInlineTranslations(
-            document,
-            allBlocks
-          );
+            const textsToTranslate = batch.map(b => b.text);
+            const translations = await provider.translateBatch(textsToTranslate, targetLang);
+            
+            // Store translations in cache and update progress
+            for (let i = 0; i < batch.length; i++) {
+                const block = batch[i];
+                const translation = translations[i];
+                if (translation) {
+                    this.cache.set(block.text, translation);
+                    completed++;
+                    onProgress(completed, allBlocks.length);
+                } else {
+                    failedBlocks.push(block);
+                    logger.error(
+                        `Failed to translate block in batch: ${block.text.substring(0, 30)}...`
+                    );
+                }
+            }
+            // Update inline translations progressively after each batch completes
+            await this.inlineProvider.updateInlineTranslations(document, allBlocks);
         } catch (error) {
-          failedBlocks.push(block);
+          // If batch fails completely, mark all blocks in it as failed
+          for (const block of batch) {
+              failedBlocks.push(block);
+          }
           logger.error(
-            `Failed to translate block: ${block.text.substring(0, 30)}...`,
+            'Batch translation failed',
             error
           );
         }
-      });
+    }));
 
-      // Wait for all translations in this batch to complete
-      await Promise.all(promises);
-    }
+    await Promise.all(promises);
 
     logger.info(
       `Concurrent translation completed: ${completed}/${blocksToTranslate.length} blocks translated`
