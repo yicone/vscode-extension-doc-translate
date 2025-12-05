@@ -349,8 +349,7 @@ export class GeminiProvider
       logger.notifyError(errorMsg, error);
       // Fallback to sequential translation if batch fails
       logger.warn(
-        'Gemini batch translation failed, falling back to sequential.',
-        error
+        `Gemini batch translation failed, falling back to sequential. Error: ${error}`
       );
       return super.translateBatch(textsToTranslate, targetLang);
     }
