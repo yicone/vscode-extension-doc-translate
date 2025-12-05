@@ -91,7 +91,8 @@ export class InlineTranslationProvider {
         const startLine = block.range.start.line;
         const endLine = block.range.end.line;
         const startCol = block.range.start.character;
-        const indentation = ' '.repeat(startCol);
+        // We don't need to recreate indentation string because we will preserve the original indentation
+        const indentation = '';
 
         // Format translation with language-specific comment syntax
         const formattedLines = formatDocstring(
@@ -106,9 +107,12 @@ export class InlineTranslationProvider {
         // Process each line of the original docstring (hide them)
         for (let lineNum = startLine; lineNum <= endLine; lineNum++) {
           const line = document.lineAt(lineNum);
+          // Hide only the content, preserving the indentation
+          // Ensure we don't start after the end of the line (e.g. empty lines)
+          const hideStartCol = Math.min(startCol, line.text.length);
           const lineRange = new vscode.Range(
             lineNum,
-            0,
+            hideStartCol,
             lineNum,
             line.text.length
           );
@@ -123,8 +127,14 @@ export class InlineTranslationProvider {
         // Show formatted translation lines
         for (let i = 0; i < formattedLines.length; i++) {
           const displayLine = Math.min(startLine + i, endLine);
+          // Display translation after the preserved indentation
           const lineDecoration: vscode.DecorationOptions = {
-            range: new vscode.Range(displayLine, 0, displayLine, 0),
+            range: new vscode.Range(
+              displayLine,
+              startCol,
+              displayLine,
+              startCol
+            ),
             renderOptions: {
               before: {
                 contentText: formattedLines[i],
