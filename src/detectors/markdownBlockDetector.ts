@@ -27,6 +27,7 @@ export class MarkdownBlockDetector extends BaseBlockDetector {
     const lines = text.split(/\r?\n/);
 
     let inCodeBlock = false;
+    let inHtmlComment = false;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -48,8 +49,24 @@ export class MarkdownBlockDetector extends BaseBlockDetector {
         continue;
       }
 
-      // Skip HTML comments
+      // Check for HTML comment start
       if (trimmedLine.startsWith('<!--')) {
+        // Check if it's a single line comment
+        if (trimmedLine.endsWith('-->')) {
+          continue;
+        }
+        inHtmlComment = true;
+        continue;
+      }
+
+      // Check for HTML comment end
+      if (inHtmlComment && trimmedLine.endsWith('-->')) {
+        inHtmlComment = false;
+        continue;
+      }
+
+      // Skip if inside HTML comment
+      if (inHtmlComment) {
         continue;
       }
 
