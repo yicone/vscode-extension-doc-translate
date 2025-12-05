@@ -7,6 +7,7 @@
   "config.model": "用于翻译的 Anthropic 模型",
   "config.openaiApiKey": "OpenAI API 密钥（优先使用 OPENAI_API_KEY 环境变量）",
   "config.openaiModel": "用于翻译的 OpenAI 模型",
+  "config.openaiBaseUrl": "OpenAI Base URL（可选）",
   "config.geminiApiKey": "Gemini API 密钥（优先使用 GEMINI_API_KEY 环境变量）",
   "config.geminiModel": "用于翻译的 Gemini 模型",
   "config.timeout": "API 请求超时时间（毫秒）",

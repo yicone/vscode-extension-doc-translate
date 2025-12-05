@@ -81,6 +81,11 @@
           "default": "gpt-4o-mini",
           "description": "%config.openaiModel%"
         },
+        "docTranslate.openaiBaseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "%config.openaiBaseUrl%"
+        },
         "docTranslate.geminiApiKey": {
           "type": "string",
           "default": "",

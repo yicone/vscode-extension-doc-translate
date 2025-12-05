@@ -7,6 +7,7 @@
   "config.model": "Anthropic model to use for translation",
   "config.openaiApiKey": "OpenAI API Key (OPENAI_API_KEY environment variable takes precedence)",
   "config.openaiModel": "OpenAI model to use for translation",
+  "config.openaiBaseUrl": "OpenAI Base URL (optional)",
   "config.geminiApiKey": "Gemini API Key (GEMINI_API_KEY environment variable takes precedence)",
   "config.geminiModel": "Gemini model to use for translation",
   "config.timeout": "API request timeout (milliseconds)",

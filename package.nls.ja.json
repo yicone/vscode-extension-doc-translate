@@ -7,6 +7,7 @@
   "config.model": "翻訳に使用するAnthropicモデル",
   "config.openaiApiKey": "OpenAI APIキー（環境変数 OPENAI_API_KEY が優先されます）",
   "config.openaiModel": "翻訳に使用するOpenAIモデル",
+  "config.openaiBaseUrl": "OpenAI Base URL（オプション）",
   "config.geminiApiKey": "Gemini APIキー（環境変数 GEMINI_API_KEY が優先されます）",
   "config.geminiModel": "翻訳に使用するGeminiモデル",
   "config.timeout": "APIリクエストのタイムアウト（ミリ秒）",
