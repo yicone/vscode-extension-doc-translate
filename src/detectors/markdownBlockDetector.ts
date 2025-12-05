@@ -71,11 +71,8 @@ export class MarkdownBlockDetector extends BaseBlockDetector {
 
       // Detect Blockquotes (> Quote)
       if (trimmedLine.startsWith('>')) {
-        // Remove '>' and trim
-        const content = trimmedLine.replace(/^>\s?/, '').trim();
-        if (content) {
-          this.addBlock(blocks, content, i, 'docstring');
-        }
+        // Pass the whole line to preserve indentation
+        this.addBlock(blocks, line, i, 'docstring');
         continue;
       }
 
@@ -113,12 +110,20 @@ export class MarkdownBlockDetector extends BaseBlockDetector {
     lineIndex: number,
     type: 'docstring' | 'comment'
   ): void {
-    // Only trim the end to preserve indentation (important for Markdown nesting)
-    const cleanText = text.trimEnd();
-    if (cleanText.trim().length > 0) {
+    const trimmedStart = text.trimStart();
+    const leadingSpaces = text.length - trimmedStart.length;
+    const cleanText = trimmedStart.trimEnd();
+
+    if (cleanText.length > 0) {
       blocks.push({
         text: cleanText,
-        range: new vscode.Range(lineIndex, 0, lineIndex, text.length),
+        // Range starts after indentation, so InlineTranslationProvider can calculate indentation correctly
+        range: new vscode.Range(
+          lineIndex,
+          leadingSpaces,
+          lineIndex,
+          text.length
+        ),
         type: type
       });
     }
